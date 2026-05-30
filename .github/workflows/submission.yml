@@ -130,6 +130,18 @@ jobs:
             echo "FETCH_ERROR=Submission contains \`sorry\`. All proofs must be complete." >> "$GITHUB_ENV"
             exit 1
           fi
+          # Reject `axiom` declarations. The only axioms permitted in a
+          # submission are the foundational ones Mathlib already uses
+          # (propext, Classical.choice, Quot.sound); these come in
+          # transitively via imports and are not declared in the user's
+          # file. A user-introduced `axiom foo : <signature>` would
+          # otherwise let them "prove" anything by assertion.
+          # Matches both `axiom foo : ...` and `noncomputable axiom foo : ...`
+          # at the start of a logical line.
+          if grep -nE '^[[:space:]]*(noncomputable[[:space:]]+)?axiom[[:space:]]' /tmp/submission.lean; then
+            echo "FETCH_ERROR=Submission contains an \`axiom\` declaration. Only Mathlib's foundational axioms (propext, Classical.choice, Quot.sound) are permitted; you cannot introduce new ones." >> "$GITHUB_ENV"
+            exit 1
+          fi
           echo "Fetched $(wc -c < /tmp/submission.lean) bytes."
 
       # ───────────────────────────────────────────────────────────────
