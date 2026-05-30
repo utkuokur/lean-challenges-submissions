@@ -69,12 +69,12 @@ jobs:
           claim = extract("Claim")
           parameter = extract("Chosen parameter r")
           nickname = extract("Nickname")
-          name = extract("Name (optional)", required=False)
+          name = extract("Full name (optional)", required=False)
           production = extract("How this proof was produced (optional)",
                                required=False)
 
-          # The dropdown stores the whole "challenge_N  (description)"
-          # string; we want just the id token.
+          # The dropdown stores the bare id (challenge_N or challenge_N_univ).
+          # `.split()[0]` is defensive in case we later add display text.
           problem_id = problem_raw.split()[0].strip()
 
           # Map problem_id -> on-disk module name. Problem ids use 1-digit
