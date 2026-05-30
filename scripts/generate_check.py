@@ -48,10 +48,9 @@ import Challenges.Submission
 
 open Function Matroid
 
-example {α : Type*} :
-    ∃ L : Set (Matroid α),
-      CompleteExcludedMinorList (IsGFRepresentable p Submission.r) L :=
-  Submission.challenge_2
+example {α : Type*} (p m : ℕ) [Fact p.Prime] (hr : Submission.r = p ^ m) :
+    ∃ L : Set (Matroid α), CompleteExcludedMinorList (IsGFRepresentable p m) L :=
+  Submission.challenge_2 p m hr
 """,
     "challenge_3": r"""
 import Challenges.challenge_03
@@ -153,10 +152,9 @@ import Challenges.Submission
 
 open Function Matroid
 
-example {α : Type*} :
-    ∀ (p r : ℕ) [Fact p.Prime],
-      ∃ L : Set (Matroid α), CompleteExcludedMinorList (IsGFRepresentable p r) L :=
-  Submission.challenge_2
+example {α : Type*} (r p m : ℕ) [Fact p.Prime] (hr : r = p ^ m) :
+    ∃ L : Set (Matroid α), CompleteExcludedMinorList (IsGFRepresentable p m) L :=
+  Submission.challenge_2 r p m hr
 """,
     "challenge_3_univ": r"""
 import Challenges.challenge_03_univ
