@@ -1,0 +1,142 @@
+name: Submit a proof
+description: Submit a Lean 4 proof for a lean-challenges parametrized problem.
+title: "[submission] "
+labels:
+  - submission
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Submit a Lean 4 proof for one of the parametrized challenges.
+
+        ## How this works
+
+        1. Host your proof publicly: a GitHub repo or a public gist that
+           contains your `challenge_NN.lean` (or `challenge_NN_univ.lean`)
+           file. The file must contain the proof body and may import any
+           Mathlib modules.
+        2. Fill in the form below. The CI will fetch your file, copy it
+           into the canonical `Challenges/` directory, and run
+           `lake build Challenges.challenge_NN` against the pinned
+           `lean-toolchain`.
+        3. On success the CI appends your entry to
+           `site-data/leaderboard.json` and closes the issue. On failure
+           it comments with the compiler output.
+
+        The CI **only** reads the single file you reference. Nothing else
+        from your submission is published or stored.
+
+  - type: input
+    id: source_url
+    attributes:
+      label: Submission URL
+      description: |
+        URL of your `challenge_NN.lean` file. Accepted forms:
+
+        - Raw file URL on GitHub:
+          `https://raw.githubusercontent.com/<owner>/<repo>/<sha>/path/to/challenge_NN.lean`
+        - Gist raw URL:
+          `https://gist.githubusercontent.com/<user>/<id>/raw/challenge_NN.lean`
+        - Plain `https://...` to any text file is also accepted.
+
+        If the URL is not pinned to a specific commit, the CI fetches
+        whatever is at that URL at workflow run time.
+      placeholder: https://raw.githubusercontent.com/me/my-proofs/main/challenge_01.lean
+    validations:
+      required: true
+
+  - type: dropdown
+    id: problem_id
+    attributes:
+      label: Problem
+      description: Which challenge are you submitting against?
+      options:
+        - challenge_1   (Hadwiger Number — parametrized)
+        - challenge_2   (Excluded Minors of GF(pʳ) — parametrized)
+        - challenge_3   (Ramsey Numbers — parametrized)
+        - challenge_4   (Sidorenko for Half-Graphs — parametrized)
+        - challenge_5   (Erdős–Hajnal — parametrized)
+        - challenge_6   (BQO of Finite Graphs — parametrized)
+        - challenge_7   (Rota's Basis Conjecture — parametrized)
+        - challenge_8   (Ryser's Hypergraph Conjecture — parametrized)
+        - challenge_9   (Union-Closed Sets — parametrized)
+        - challenge_10  (Unfriendly Partition — parametrized)
+        - challenge_1_univ  (Hadwiger — universal ∀r)
+        - challenge_3_univ  (Ramsey — universal ∀r)
+        - challenge_5_univ  (Erdős–Hajnal — universal ∀r)
+        - challenge_7_univ  (Rota — universal ∀r)
+        - challenge_8_univ  (Ryser — universal ∀r)
+        - challenge_9_univ  (Union-Closed — universal ∀r)
+        - challenge_10_univ (Unfriendly — universal ∀r)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: claim
+    attributes:
+      label: Claim
+      description: Are you proving or disproving the statement?
+      options:
+        - prove
+        - disprove
+    validations:
+      required: true
+
+  - type: input
+    id: parameter
+    attributes:
+      label: Chosen parameter r
+      description: |
+        For parametrized challenges, the value of `r` your proof
+        establishes. For universal (∀r) challenges, write `universal`.
+      placeholder: e.g. 5, or universal
+    validations:
+      required: true
+
+  - type: input
+    id: nickname
+    attributes:
+      label: Nickname
+      description: Display name for the public leaderboard.
+      placeholder: lean_enjoyer
+    validations:
+      required: true
+
+  - type: input
+    id: name
+    attributes:
+      label: Name (optional)
+      description: Full name to display alongside your nickname, if you like.
+      placeholder: ""
+    validations:
+      required: false
+
+  - type: textarea
+    id: production_description
+    attributes:
+      label: How this proof was produced (optional)
+      description: |
+        Brief description of how the proof was produced — by hand, by an
+        AI model, with what level of automation, building on what prior
+        work. Shown next to the leaderboard entry.
+      placeholder: |
+        e.g. Hand-written, ~3 hours, building on Mathlib's
+        Combinatorics.SimpleGraph.Coloring library.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: acknowledgements
+    attributes:
+      label: Acknowledgements
+      options:
+        - label: |
+            I understand the CI will fetch the file at the URL above and
+            run `lake build` against it. The submission URL must be
+            publicly accessible.
+          required: true
+        - label: |
+            I understand that the nickname, name (if provided), problem,
+            claim, parameter, and the production description (if
+            provided) will be published on the public leaderboard.
+          required: true

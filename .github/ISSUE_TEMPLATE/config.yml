@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Lean Challenges website
+    url: https://github.com/utkuokur/lean-challenge
+    about: The challenge statements, PDFs, and leaderboard live in the lean-challenge repo.
+  - name: Mathlib / Lean Zulip
+    url: https://leanprover.zulipchat.com/
+    about: General Lean and Mathlib questions.

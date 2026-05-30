@@ -1,0 +1,256 @@
+name: Evaluate submission
+
+# Triggered when an issue is labeled `submission` (the issue template
+# applies the label automatically on creation). The job parses the issue
+# body, fetches the user's .lean file, copies it into a fresh checkout
+# of utkuokur/lean-challenge, runs `lake build` against the pinned
+# toolchain, and on success appends an entry to site-data/leaderboard.json.
+
+on:
+  issues:
+    types: [labeled]
+
+concurrency:
+  # Per-issue group so concurrent submissions don't cancel each other.
+  group: submission-issue-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  evaluate:
+    if: github.event.label.name == 'submission'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      # `contents: write` so we can push the updated leaderboard.json back.
+      contents: write
+      # `issues: write` so we can comment + close the submission issue.
+      issues: write
+    steps:
+      # ───────────────────────────────────────────────────────────────
+      # 0. Checkouts
+      # ───────────────────────────────────────────────────────────────
+      - name: Checkout submissions repo (this repo)
+        uses: actions/checkout@v4
+
+      - name: Checkout lean-challenge build environment
+        uses: actions/checkout@v4
+        with:
+          repository: utkuokur/lean-challenge
+          ref: universal-challenges
+          path: lean-challenge
+
+      # ───────────────────────────────────────────────────────────────
+      # 1. Parse issue body
+      #
+      # GitHub Issue Forms render each field as a `### Label` section
+      # followed by the value. We extract the seven fields by header.
+      # ───────────────────────────────────────────────────────────────
+      - name: Parse issue body
+        id: parse
+        env:
+          ISSUE_BODY: ${{ github.event.issue.body }}
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import os, re, sys
+
+          body = os.environ.get("ISSUE_BODY", "")
+
+          def extract(label: str, required: bool = True) -> str:
+              pat = rf"^###\s+{re.escape(label)}\s*\n+(?P<v>.+?)(?=\n+###\s|\Z)"
+              m = re.search(pat, body, re.MULTILINE | re.DOTALL)
+              if not m:
+                  if required:
+                      sys.exit(f"missing required field: {label}")
+                  return ""
+              return m.group("v").strip()
+
+          source_url = extract("Submission URL")
+          problem_raw = extract("Problem")
+          claim = extract("Claim")
+          parameter = extract("Chosen parameter r")
+          nickname = extract("Nickname")
+          name = extract("Name (optional)", required=False)
+          production = extract("How this proof was produced (optional)",
+                               required=False)
+
+          # The dropdown stores the whole "challenge_N  (description)"
+          # string; we want just the id token.
+          problem_id = problem_raw.split()[0].strip()
+
+          # Map problem_id -> on-disk module name. Problem ids use 1-digit
+          # numbering (challenge_1); on-disk files use 2-digit zero-padded
+          # numbering (challenge_01.lean).
+          m = re.match(r"^challenge_(\d+)(_univ)?$", problem_id)
+          if not m:
+              sys.exit(f"unrecognized problem id: {problem_id!r}")
+          n = int(m.group(1))
+          suffix = m.group(2) or ""
+          module = f"challenge_{n:02d}{suffix}"
+
+          # Normalize "_No response_" (GitHub Issue Forms placeholder
+          # for empty optional fields) to actual empty string.
+          if name in ("", "_No response_"):
+              name = ""
+          if production in ("", "_No response_"):
+              production = ""
+
+          # Strip newlines from single-line fields so GITHUB_OUTPUT
+          # multiline syntax isn't needed for them.
+          single = {"source_url": source_url, "problem_id": problem_id,
+                    "module": module, "claim": claim,
+                    "parameter": parameter, "nickname": nickname,
+                    "name": name}
+          for k, v in single.items():
+              v_one = v.replace("\n", " ").replace("\r", "").strip()
+              print(f"{k}={v_one}")
+
+          # production_description can contain newlines; use heredoc.
+          print("production_description<<__EOF__")
+          print(production)
+          print("__EOF__")
+          PY
+
+      # ───────────────────────────────────────────────────────────────
+      # 2. Fetch the user's .lean file
+      # ───────────────────────────────────────────────────────────────
+      - name: Fetch submitted .lean file
+        id: fetch
+        env:
+          URL: ${{ steps.parse.outputs.source_url }}
+        run: |
+          set -e
+          if ! curl -fsSL --max-time 30 --max-filesize 1048576 \
+              -H "Accept: text/plain" "$URL" -o /tmp/submission.lean; then
+            echo "FETCH_ERROR=Could not fetch the submission URL." >> "$GITHUB_ENV"
+            exit 1
+          fi
+          # Reject `sorry`-containing proofs early (fast fail without
+          # invoking lake).
+          if grep -nE '(^|[^[:alnum:]_])sorry([^[:alnum:]_]|$)' /tmp/submission.lean; then
+            echo "FETCH_ERROR=Submission contains \`sorry\`. All proofs must be complete." >> "$GITHUB_ENV"
+            exit 1
+          fi
+          echo "Fetched $(wc -c < /tmp/submission.lean) bytes."
+
+      # ───────────────────────────────────────────────────────────────
+      # 3. Install elan + Lean toolchain
+      # ───────────────────────────────────────────────────────────────
+      - name: Install elan
+        run: |
+          set -e
+          curl -fsSL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh \
+            -o /tmp/elan-init.sh
+          sh /tmp/elan-init.sh -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      # ───────────────────────────────────────────────────────────────
+      # 4. Copy user file into Challenges/, then build
+      # ───────────────────────────────────────────────────────────────
+      - name: Stage submission into Challenges/
+        run: |
+          MODULE="${{ steps.parse.outputs.module }}"
+          cp /tmp/submission.lean "lean-challenge/Challenges/${MODULE}.lean"
+          echo "Staged at lean-challenge/Challenges/${MODULE}.lean"
+
+      - name: Fetch Mathlib cache
+        working-directory: lean-challenge
+        # `|| true` so a cache miss doesn't abort the run — lake build
+        # will still work, just slowly.
+        run: lake exe cache get || true
+
+      - name: Build the submission
+        id: build
+        working-directory: lean-challenge
+        run: |
+          set -o pipefail
+          MODULE="${{ steps.parse.outputs.module }}"
+          lake build "Challenges.${MODULE}" 2>&1 | tee /tmp/build.log
+
+      # ───────────────────────────────────────────────────────────────
+      # 5a. Success path: update leaderboard, comment, close issue
+      # ───────────────────────────────────────────────────────────────
+      - name: Append to leaderboard
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 scripts/append_leaderboard.py \
+            --leaderboard site-data/leaderboard.json \
+            --nickname "${{ steps.parse.outputs.nickname }}" \
+            --name "${{ steps.parse.outputs.name }}" \
+            --problem "${{ steps.parse.outputs.problem_id }}" \
+            --claim "${{ steps.parse.outputs.claim }}" \
+            --parameter "${{ steps.parse.outputs.parameter }}" \
+            --issue "${{ github.event.issue.number }}" \
+            --source-url "${{ steps.parse.outputs.source_url }}"
+
+          # Commit + push with a small retry loop so concurrent
+          # submission runs don't clobber each other.
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          for attempt in 1 2 3 4 5; do
+            git add site-data/leaderboard.json
+            git commit -m "leaderboard: add issue #${{ github.event.issue.number }}" || true
+            if git push; then
+              break
+            fi
+            echo "push attempt ${attempt} failed; pulling rebase and retrying"
+            git pull --rebase
+            python3 scripts/append_leaderboard.py \
+              --leaderboard site-data/leaderboard.json \
+              --nickname "${{ steps.parse.outputs.nickname }}" \
+              --name "${{ steps.parse.outputs.name }}" \
+              --problem "${{ steps.parse.outputs.problem_id }}" \
+              --claim "${{ steps.parse.outputs.claim }}" \
+              --parameter "${{ steps.parse.outputs.parameter }}" \
+              --issue "${{ github.event.issue.number }}" \
+              --source-url "${{ steps.parse.outputs.source_url }}"
+          done
+
+      - name: Comment success on issue
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue comment ${{ github.event.issue.number }} \
+            --repo "${{ github.repository }}" \
+            --body "✅ Build succeeded — added to the leaderboard.
+
+          - Problem: \`${{ steps.parse.outputs.problem_id }}\`
+          - Claim: ${{ steps.parse.outputs.claim }} for r = ${{ steps.parse.outputs.parameter }}
+          - Module built: \`Challenges.${{ steps.parse.outputs.module }}\`"
+          gh issue close ${{ github.event.issue.number }} \
+            --repo "${{ github.repository }}" \
+            --reason completed
+
+      # ───────────────────────────────────────────────────────────────
+      # 5b. Failure path: comment with logs, close issue
+      # ───────────────────────────────────────────────────────────────
+      - name: Comment failure on issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Prefer the FETCH_ERROR set during fetch, otherwise summarize
+          # the tail of the build log.
+          if [ -n "${FETCH_ERROR:-}" ]; then
+            REASON="$FETCH_ERROR"
+            LOG_BLOCK=""
+          else
+            REASON="\`lake build\` failed."
+            if [ -f /tmp/build.log ]; then
+              TAIL=$(tail -c 4000 /tmp/build.log)
+              LOG_BLOCK=$'\n\n<details><summary>Build log (tail)</summary>\n\n```\n'"$TAIL"$'\n```\n\n</details>'
+            else
+              LOG_BLOCK=""
+            fi
+          fi
+          BODY="❌ Submission rejected: ${REASON}
+
+          See the workflow run for full logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}${LOG_BLOCK}"
+          gh issue comment ${{ github.event.issue.number }} \
+            --repo "${{ github.repository }}" \
+            --body "$BODY"
+          gh issue close ${{ github.event.issue.number }} \
+            --repo "${{ github.repository }}" \
+            --reason "not planned" || true
