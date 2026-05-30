@@ -156,13 +156,44 @@ jobs:
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
 
       # ───────────────────────────────────────────────────────────────
-      # 4. Copy user file into Challenges/, then build
+      # 4. Wrap submission in a Submission namespace and generate the
+      #    signature-shim check file, then build the check (NOT the
+      #    user's file directly). This is the load-bearing step: if
+      #    the user's theorem signature does not match the canonical
+      #    one in Challenges/challenge_NN.lean (with `r` substituted
+      #    by Submission.r), `lake build Challenges.Check` fails to
+      #    typecheck.
       # ───────────────────────────────────────────────────────────────
-      - name: Stage submission into Challenges/
+      - name: Wrap submission into Challenges/Submission.lean
         run: |
           MODULE="${{ steps.parse.outputs.module }}"
-          cp /tmp/submission.lean "lean-challenge/Challenges/${MODULE}.lean"
-          echo "Staged at lean-challenge/Challenges/${MODULE}.lean"
+          # The wrapper:
+          # 1. Imports the canonical so the user has access to its
+          #    helper structures (Minor, hadwigerNumber, etc.).
+          # 2. Hoists the user's own imports to file-top (Lean requires
+          #    all imports before any other content).
+          # 3. Puts everything else inside `namespace Submission` so
+          #    the user's `def r` and `theorem challenge_N` are at
+          #    `Submission.r` / `Submission.challenge_N`, distinct
+          #    from the canonical's defs at root.
+          {
+            echo "-- CI-generated wrapper for the submission."
+            echo "import Challenges.${MODULE}"
+            grep -E '^[[:space:]]*import[[:space:]]+' /tmp/submission.lean || true
+            echo ""
+            echo "namespace Submission"
+            echo ""
+            grep -v -E '^[[:space:]]*import[[:space:]]+' /tmp/submission.lean
+            echo ""
+            echo "end Submission"
+          } > "lean-challenge/Challenges/Submission.lean"
+          echo "Wrote Submission.lean ($(wc -c < lean-challenge/Challenges/Submission.lean) bytes)"
+
+      - name: Generate signature-shim Check.lean
+        run: |
+          python3 scripts/generate_check.py \
+            --problem "${{ steps.parse.outputs.problem_id }}" \
+            --output "lean-challenge/Challenges/Check.lean"
 
       - name: Fetch Mathlib cache
         working-directory: lean-challenge
@@ -170,13 +201,17 @@ jobs:
         # will still work, just slowly.
         run: lake exe cache get || true
 
-      - name: Build the submission
+      - name: Build the signature shim
         id: build
         working-directory: lean-challenge
+        # This builds Challenges.Check, which transitively builds
+        # Challenges.Submission. Failure here means EITHER the user's
+        # proof has a typo / wrong axiom / non-typechecking term, OR
+        # the theorem signature does not match the canonical one
+        # (the bypass we are guarding against).
         run: |
           set -o pipefail
-          MODULE="${{ steps.parse.outputs.module }}"
-          lake build "Challenges.${MODULE}" 2>&1 | tee /tmp/build.log
+          lake build Challenges.Check 2>&1 | tee /tmp/build.log
 
       # ───────────────────────────────────────────────────────────────
       # 5a. Success path: update leaderboard, comment, close issue

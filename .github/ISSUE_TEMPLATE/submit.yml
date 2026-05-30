@@ -40,8 +40,11 @@ body:
         - challenge_9
         - challenge_10
         - challenge_1_univ
+        - challenge_2_univ
         - challenge_3_univ
+        - challenge_4_univ
         - challenge_5_univ
+        - challenge_6_univ
         - challenge_7_univ
         - challenge_8_univ
         - challenge_9_univ
