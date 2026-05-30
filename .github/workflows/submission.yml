@@ -32,11 +32,11 @@ jobs:
       - name: Checkout submissions repo (this repo)
         uses: actions/checkout@v4
 
-      - name: Checkout lean-challenge build environment
+      - name: Checkout lean-challenges build environment
         uses: actions/checkout@v4
         with:
-          repository: utkuokur/lean-challenge
-          ref: universal-challenges
+          repository: utkuokur/lean-challenges
+          ref: main
           path: lean-challenge
 
       # ───────────────────────────────────────────────────────────────
@@ -278,19 +278,23 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Prefer the FETCH_ERROR set during fetch, otherwise summarize
-          # the tail of the build log.
+          # Pick the most specific reason we have evidence for. The
+          # FETCH_ERROR env var is set by the fetch step on sorry / axiom
+          # / URL failures. Otherwise we sniff the filesystem to see how
+          # far the run got before failing.
+          LOG_BLOCK=""
           if [ -n "${FETCH_ERROR:-}" ]; then
             REASON="$FETCH_ERROR"
-            LOG_BLOCK=""
+          elif [ ! -d lean-challenge ]; then
+            REASON="Could not check out the canonical challenges repository (\`utkuokur/lean-challenges@main\`). It may be private or temporarily unavailable. Please contact the maintainer."
+          elif [ ! -f /tmp/submission.lean ]; then
+            REASON="Setup failed before the submission could be fetched. See workflow logs."
+          elif [ -f /tmp/build.log ]; then
+            REASON="\`lake build\` of the signature shim failed. Most commonly: your theorem's type does not match the canonical \`challenge_N\` signature (substituting your \`Submission.r\` for \`r\`). The tail of the build log is below."
+            TAIL=$(tail -c 4000 /tmp/build.log)
+            LOG_BLOCK=$'\n\n<details><summary>Build log (tail)</summary>\n\n```\n'"$TAIL"$'\n```\n\n</details>'
           else
-            REASON="\`lake build\` failed."
-            if [ -f /tmp/build.log ]; then
-              TAIL=$(tail -c 4000 /tmp/build.log)
-              LOG_BLOCK=$'\n\n<details><summary>Build log (tail)</summary>\n\n```\n'"$TAIL"$'\n```\n\n</details>'
-            else
-              LOG_BLOCK=""
-            fi
+            REASON="The evaluation step failed before \`lake build\` started. See workflow logs."
           fi
           BODY="❌ Submission rejected: ${REASON}
 
