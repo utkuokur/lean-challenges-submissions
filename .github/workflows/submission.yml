@@ -101,8 +101,10 @@ jobs:
 
           # Map problem_id -> on-disk module name. Problem ids use 1-digit
           # numbering (challenge_1); on-disk files use 2-digit zero-padded
-          # numbering (challenge_01.lean).
-          m = re.match(r"^challenge_(\d+)(_univ)?$", problem_id)
+          # numbering (challenge_01.lean). The `_disprove` suffix is only
+          # valid after `_univ` (only universal problems have a disprove
+          # direction in the canonical set).
+          m = re.match(r"^challenge_(\d+)(_univ(?:_disprove)?)?$", problem_id)
           if not m:
               sys.exit(f"unrecognized problem id: {problem_id!r}")
           n = int(m.group(1))

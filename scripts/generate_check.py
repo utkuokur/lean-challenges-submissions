@@ -236,6 +236,115 @@ example :
       ∃ P : Challenge10.Partition V, Challenge10.IsUnfriendly G P :=
   Submission.challenge_10
 """,
+
+    # ─── Universal challenges, disprove direction ─────────────────────
+    # The submitter exhibits a counterexample to the universal claim.
+    "challenge_1_univ_disprove": r"""
+import Challenges.challenge_01_univ_disprove
+import Challenges.Submission
+
+open SimpleGraph
+
+example :
+    ¬ ∀ {V : Type*} [Fintype V] (G : SimpleGraph V),
+      ∀ r, hadwigerNumber G ≤ r → G.Colorable (r + 1) :=
+  Submission.challenge_1
+""",
+    "challenge_2_univ_disprove": r"""
+import Challenges.challenge_02_univ_disprove
+import Challenges.Submission
+
+open Function Matroid
+
+example :
+    ¬ ∀ {α : Type*} (r p m : ℕ) [Fact p.Prime], r = p ^ m →
+      ∃ L : Set (Matroid α),
+        CompleteExcludedMinorList (IsGFRepresentable p m) L :=
+  Submission.challenge_2
+""",
+    "challenge_3_univ_disprove": r"""
+import Challenges.challenge_03_univ_disprove
+import Challenges.Submission
+
+open Filter
+
+example :
+    ¬ ∀ r : ℕ, ∃ d₁ d₂ : ℝ, |d₁ - d₂| ≤ (4 - √2) * (0.9 : ℝ)^r ∧
+      ∀ᶠ t in atTop, d₁ ^ t ≤ ramseyNumber t ∧ ramseyNumber t ≤ d₂ ^ t :=
+  Submission.challenge_3
+""",
+    "challenge_4_univ_disprove": r"""
+import Challenges.challenge_04_univ_disprove
+import Challenges.Submission
+
+open SimpleGraph
+
+example :
+    ¬ ∀ {V : Type*} [Fintype V], ∀ r, ∀ (G : SimpleGraph V),
+      SidorenkoFor (halfGraph r) G :=
+  Submission.challenge_4
+""",
+    "challenge_5_univ_disprove": r"""
+import Challenges.challenge_05_univ_disprove
+import Challenges.Submission
+
+open SimpleGraph
+
+example : ¬ ∀ r : ℕ, ErdosHajnalConjectureFor (pathGraph r) :=
+  Submission.challenge_5
+""",
+    "challenge_6_univ_disprove": r"""
+import Challenges.challenge_06_univ_disprove
+import Challenges.Submission
+
+open SimpleGraph
+
+example :
+    ¬ ∀ r, IsBQO (fun (G H : SimpleGraph (Fin r)) => IsMinor H G) :=
+  Submission.challenge_6
+""",
+    "challenge_7_univ_disprove": r"""
+import Challenges.challenge_07_univ_disprove
+import Challenges.Submission
+
+open Function Matroid
+
+example {α : Type} [Fintype α] :
+    ¬ ∀ (n : ℕ), ∀ {M : Matroid α} (_ : M.eRank = (n : ℕ∞))
+      {B : Fin n → Set α},
+      IsFamilyOfDisjointBases M B →
+      ∃ C : Fin n → Set α, IsFamilyOfDisjointBases M C ∧
+        ∀ (i j : Fin n), (B i ∩ C j).ncard = 1 :=
+  Submission.challenge_7
+""",
+    "challenge_8_univ_disprove": r"""
+import Challenges.challenge_08_univ_disprove
+import Challenges.Submission
+
+example : ¬ Challenge08.RyserHypergraphConjecture.{u} :=
+  Submission.challenge_8
+""",
+    "challenge_9_univ_disprove": r"""
+import Challenges.challenge_09_univ_disprove
+import Challenges.Submission
+
+example :
+    ¬ ∀ {U : Type} [Fintype U] [DecidableEq U]
+      (r : Nat) (_ : 2 < r) {F : Finset (Finset U)}
+      (_ : Challenge09.IsUnionClosed F) (_ : Challenge09.Nondegenerate F),
+      ∃ x, Challenge09.InGround F x ∧
+        Challenge09.density F x ≥ (1 / 2 : Rat) - 1 / (r : Rat) :=
+  Submission.challenge_9
+""",
+    "challenge_10_univ_disprove": r"""
+import Challenges.challenge_10_univ_disprove
+import Challenges.Submission
+
+example :
+    ¬ ∀ {V : Type} [Fintype V] [DecidableEq V] (G : SimpleGraph V),
+      ∃ P : Challenge10.Partition V, Challenge10.IsUnfriendly G P :=
+  Submission.challenge_10
+""",
 }
 
 

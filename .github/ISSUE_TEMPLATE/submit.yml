@@ -49,6 +49,16 @@ body:
         - challenge_8_univ
         - challenge_9_univ
         - challenge_10_univ
+        - challenge_1_univ_disprove
+        - challenge_2_univ_disprove
+        - challenge_3_univ_disprove
+        - challenge_4_univ_disprove
+        - challenge_5_univ_disprove
+        - challenge_6_univ_disprove
+        - challenge_7_univ_disprove
+        - challenge_8_univ_disprove
+        - challenge_9_univ_disprove
+        - challenge_10_univ_disprove
     validations:
       required: true
 
