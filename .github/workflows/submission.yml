@@ -124,9 +124,22 @@ jobs:
             echo "FETCH_ERROR=Could not fetch the submission URL." >> "$GITHUB_ENV"
             exit 1
           fi
+          # Strip Lean comments before content checks. Otherwise a benign
+          # comment like `-- proof avoids sorry by ...` would be rejected.
+          # Handles `-- line comments` and `/- block comments -/`. Nested
+          # block comments are not handled; in practice users do not nest.
+          python3 - <<'PY' > /tmp/submission-stripped.lean
+          import re
+          src = open('/tmp/submission.lean').read()
+          # Remove /- ... -/ block comments (non-greedy).
+          src = re.sub(r'/-[\s\S]*?-/', '', src)
+          # Remove -- line comments (everything up to end-of-line).
+          src = re.sub(r'--[^\n]*', '', src)
+          import sys; sys.stdout.write(src)
+          PY
           # Reject `sorry`-containing proofs early (fast fail without
-          # invoking lake).
-          if grep -nE '(^|[^[:alnum:]_])sorry([^[:alnum:]_]|$)' /tmp/submission.lean; then
+          # invoking lake). Operates on the comment-stripped copy.
+          if grep -nE '(^|[^[:alnum:]_])sorry([^[:alnum:]_]|$)' /tmp/submission-stripped.lean; then
             echo "FETCH_ERROR=Submission contains \`sorry\`. All proofs must be complete." >> "$GITHUB_ENV"
             exit 1
           fi
@@ -138,7 +151,7 @@ jobs:
           # otherwise let them "prove" anything by assertion.
           # Matches both `axiom foo : ...` and `noncomputable axiom foo : ...`
           # at the start of a logical line.
-          if grep -nE '^[[:space:]]*(noncomputable[[:space:]]+)?axiom[[:space:]]' /tmp/submission.lean; then
+          if grep -nE '^[[:space:]]*(noncomputable[[:space:]]+)?axiom[[:space:]]' /tmp/submission-stripped.lean; then
             echo "FETCH_ERROR=Submission contains an \`axiom\` declaration. Only Mathlib's foundational axioms (propext, Classical.choice, Quot.sound) are permitted; you cannot introduce new ones." >> "$GITHUB_ENV"
             exit 1
           fi
