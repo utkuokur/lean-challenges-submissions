@@ -1,0 +1,110 @@
+name: Submit a proof of the universal conjecture
+description: Settle one of the universal (∀r) challenges, either by proving or disproving it.
+title: "[submission] "
+labels:
+  - submission
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Submit a proof (or counterexample) for the **universal** form of
+        one of the challenges — the ∀r version that quantifies over all
+        parameters. If you're settling a specific value of `r`, use the
+        "Submit a proof for a specific r" form instead.
+
+        Fill in **exactly one** of "Submission URL" or "Repository URL":
+
+        - **Submission URL** for a single `.lean` file at a public raw
+          URL (a gist, or a `raw.githubusercontent.com/...` link).
+        - **Repository URL** for multi-file submissions hosted in a
+          public GitHub repo. Your repo must contain
+          `Submission/Main.lean` (with `theorem challenge_N` inside
+          `namespace Submission`), plus any helpers as
+          `Submission/<Name>.lean`.
+
+        AI-assisted, human, or hybrid proofs are all fine — we don't
+        ask how the proof was produced.
+
+  - type: input
+    id: source_url
+    attributes:
+      label: Submission URL
+      description: Raw URL to a single `.lean` file. Leave blank if submitting a repo.
+      placeholder: https://raw.githubusercontent.com/me/my-proofs/main/challenge_01_univ.lean
+    validations:
+      required: false
+
+  - type: input
+    id: repo_url
+    attributes:
+      label: Repository URL
+      description: Public HTTPS URL of your GitHub repo. Leave blank if submitting a single file.
+      placeholder: https://github.com/me/my-proofs
+    validations:
+      required: false
+
+  - type: input
+    id: repo_ref
+    attributes:
+      label: Git ref
+      description: Branch or tag to evaluate (repo submissions only). Defaults to `main`.
+      placeholder: main
+    validations:
+      required: false
+
+  - type: dropdown
+    id: problem_id
+    attributes:
+      label: Problem
+      description: Which challenge are you settling?
+      options:
+        - challenge_1
+        - challenge_2
+        - challenge_3
+        - challenge_4
+        - challenge_5
+        - challenge_6
+        - challenge_7
+        - challenge_8
+        - challenge_9
+        - challenge_10
+    validations:
+      required: true
+
+  - type: dropdown
+    id: claim
+    attributes:
+      label: Claim
+      description: Are you proving the universal conjecture, or disproving it (exhibiting a counterexample)?
+      options:
+        - prove
+        - disprove
+    validations:
+      required: true
+
+  - type: input
+    id: nickname
+    attributes:
+      label: Nickname
+      description: Display name for the leaderboard.
+      placeholder: lean_enjoyer
+    validations:
+      required: true
+
+  - type: input
+    id: full_name
+    attributes:
+      label: Full name (optional)
+      description: Shown next to your nickname if provided.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: acknowledgements
+    attributes:
+      label: Acknowledgements
+      options:
+        - label: I understand the CI will fetch the URL (or shallow-clone the repo) above and run `lake build` against the canonical environment.
+          required: true
+        - label: I understand my nickname, name, problem, claim, and parameter will be published on the public leaderboard.
+          required: true

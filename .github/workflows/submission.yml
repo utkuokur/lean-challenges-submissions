@@ -25,18 +25,15 @@ concurrency:
 
 jobs:
   evaluate:
-    # Gate on the issue body having either the single-file form's
-    # `### Submission URL` section OR the repo form's `### Repository URL`
-    # section. This routes both submission templates here and silently
-    # ignores ad-hoc off-topic issues. For the `labeled` trigger we ALSO
-    # require the label to actually be `submission`, so other labels
-    # (`triage`, `wontfix`, ...) don't re-fire the workflow.
+    # Gate on the issue body having the `### Problem` section every
+    # submission template emits. This routes all submission-form issues
+    # here and silently ignores ad-hoc off-topic issues. For the
+    # `labeled` trigger we ALSO require the label to actually be
+    # `submission`, so other labels (`triage`, `wontfix`, ...) don't
+    # re-fire the workflow.
     if: |
       github.event.issue.state == 'open'
-      && (
-        contains(github.event.issue.body, '### Submission URL')
-        || contains(github.event.issue.body, '### Repository URL')
-      )
+      && contains(github.event.issue.body, '### Problem')
       && (
         github.event.action == 'opened'
         || github.event.action == 'reopened'
@@ -67,8 +64,24 @@ jobs:
       # 1. Parse issue body
       #
       # GitHub Issue Forms render each field as a `### Label` section
-      # followed by the value. We extract the fields by header and
-      # detect which submission template was used (gist vs repo).
+      # followed by the value. The two submission templates
+      # (`submit-specific.yml`, `submit-universal.yml`) share most of
+      # their fields; we infer two orthogonal modes from the body:
+      #
+      #   - `mode` (gist | repo): which URL field the user filled.
+      #     Both templates expose both URL fields; we look at content,
+      #     not headers, since both headers always appear.
+      #
+      #   - `scope` (specific | universal): whether a `Chosen parameter
+      #     r` field is present. Only the specific-r form has it; in
+      #     the universal form `parameter` is implicitly "universal"
+      #     and the user instead picks `claim` = prove or disprove,
+      #     which is how the canonical-file pinning is chosen.
+      #
+      # In universal scope we map `problem_id` from `challenge_N` to
+      # `challenge_N_univ` (claim=prove) or `challenge_N_univ_disprove`
+      # (claim=disprove), so the rest of the pipeline (Check.lean
+      # template, signature shim) doesn't need to know about scope.
       # ───────────────────────────────────────────────────────────────
       - name: Parse issue body
         id: parse
@@ -89,35 +102,57 @@ jobs:
                   return ""
               return m.group("v").strip()
 
-          # Detect submission mode by which URL field the template emitted.
-          # `gist` is the single-file flow (curl one .lean); `repo` is the
-          # multi-file flow (shallow git clone, splice Submission/ dir).
-          if "### Repository URL" in body:
-              mode = "repo"
-              source_url = ""
-              repo_url = extract("Repository URL")
-              repo_ref = extract("Git ref", required=False) or "main"
-          elif "### Submission URL" in body:
+          def normalize(v: str) -> str:
+              # "_No response_" is GitHub Issue Forms' rendering of an
+              # empty optional field; treat it as the empty string.
+              return "" if v in ("", "_No response_") else v
+
+          # Both templates expose both URL fields; the user fills one
+          # and leaves the other blank. Disambiguate by content.
+          source_url = normalize(extract("Submission URL", required=False))
+          repo_url = normalize(extract("Repository URL", required=False))
+          if source_url and repo_url:
+              sys.exit("Fill exactly one of `Submission URL` or "
+                       "`Repository URL`, not both.")
+          if not source_url and not repo_url:
+              sys.exit("Fill in either `Submission URL` (single .lean) "
+                       "or `Repository URL` (multi-file repo).")
+          if source_url:
               mode = "gist"
-              source_url = extract("Submission URL")
-              repo_url = ""
               repo_ref = ""
           else:
-              sys.exit("issue body has neither '### Submission URL' "
-                       "nor '### Repository URL' — was it filed via the "
-                       "submission template?")
+              mode = "repo"
+              repo_ref = normalize(
+                  extract("Git ref", required=False)) or "main"
+
+          # Specific vs universal scope is signalled by the presence of
+          # the `Chosen parameter r` field, which only the specific
+          # template emits.
+          parameter_raw = normalize(
+              extract("Chosen parameter r", required=False))
+          if parameter_raw:
+              scope = "specific"
+              parameter = parameter_raw
+              # The specific-r flow always proves at a single r; we don't
+              # ask the user. (The CHECKS table in generate_check.py
+              # only carries prove-direction templates for specific r.)
+              claim = "prove"
+          else:
+              scope = "universal"
+              parameter = "universal"
+              claim = extract("Claim")
 
           problem_raw = extract("Problem")
-          claim = extract("Claim")
-          parameter = extract("Chosen parameter r")
           nickname = extract("Nickname")
-          name = extract("Full name (optional)", required=False)
-          production = extract("How this proof was produced (optional)",
-                               required=False)
+          name = normalize(
+              extract("Full name (optional)", required=False))
 
-          # The dropdown stores the bare id (challenge_N or challenge_N_univ).
-          # `.split()[0]` is defensive in case we later add display text.
+          # The dropdown stores the bare id (challenge_N). For universal
+          # scope, append the suffix that picks the right canonical file.
           problem_id = problem_raw.split()[0].strip()
+          if scope == "universal":
+              problem_id = problem_id + (
+                  "_univ_disprove" if claim == "disprove" else "_univ")
 
           # Map problem_id -> on-disk module name. Problem ids use 1-digit
           # numbering (challenge_1); on-disk files use 2-digit zero-padded
@@ -131,16 +166,9 @@ jobs:
           suffix = m.group(2) or ""
           module = f"challenge_{n:02d}{suffix}"
 
-          # Normalize "_No response_" (GitHub Issue Forms placeholder
-          # for empty optional fields) to actual empty string.
-          if name in ("", "_No response_"):
-              name = ""
-          if production in ("", "_No response_"):
-              production = ""
-
           # Strip newlines from single-line fields so GITHUB_OUTPUT
           # multiline syntax isn't needed for them.
-          single = {"mode": mode,
+          single = {"mode": mode, "scope": scope,
                     "source_url": source_url,
                     "repo_url": repo_url, "repo_ref": repo_ref,
                     "problem_id": problem_id,
@@ -150,11 +178,6 @@ jobs:
           for k, v in single.items():
               v_one = v.replace("\n", " ").replace("\r", "").strip()
               print(f"{k}={v_one}")
-
-          # production_description can contain newlines; use heredoc.
-          print("production_description<<__EOF__")
-          print(production)
-          print("__EOF__")
           PY
 
       # ───────────────────────────────────────────────────────────────
