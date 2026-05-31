@@ -414,8 +414,41 @@ TOML
           lake build Challenges.Check 2>&1 | tee /tmp/build.log
 
       # ───────────────────────────────────────────────────────────────
-      # 5a. Success path: update leaderboard, comment, close issue
+      # 5a. Success path: archive the proof, update leaderboard, comment,
+      #     close issue.
+      #
+      # The leaderboard only stores a `source_url` link back to the user's
+      # gist/repo, which can rot (deletion, force-push, unpinned ref). To
+      # preserve every winning proof we also commit the exact evaluated
+      # source into `solutions/<problem>_r<param>_issue<N>`:
+      #   - gist mode: the single pre-wrapper file the user submitted.
+      #   - repo mode: the whole `Submission/` directory CI built.
+      # A `git pull` of this repo then mirrors all solutions locally.
       # ───────────────────────────────────────────────────────────────
+      - name: Archive accepted solution
+        if: success()
+        env:
+          MODE: ${{ steps.parse.outputs.mode }}
+          PROBLEM: ${{ steps.parse.outputs.problem_id }}
+          PARAM: ${{ steps.parse.outputs.parameter }}
+          ISSUE: ${{ github.event.issue.number }}
+        run: |
+          set -e
+          # Slugify the parameter so it is always a safe path component
+          # ("universal", "5", or anything the form accepted).
+          SAFE_PARAM=$(printf '%s' "$PARAM" | tr -c 'A-Za-z0-9._-' '_')
+          DEST="solutions/${PROBLEM}_r${SAFE_PARAM}_issue${ISSUE}"
+          mkdir -p solutions
+          if [ "$MODE" = "gist" ]; then
+            cp /tmp/submission.lean "${DEST}.lean"
+            echo "Archived gist submission to ${DEST}.lean"
+          else
+            rm -rf "$DEST"
+            mkdir -p "$DEST"
+            cp -r lean-challenge/Submission "${DEST}/Submission"
+            echo "Archived repo submission to ${DEST}/Submission"
+          fi
+
       - name: Append to leaderboard
         if: success()
         env:
@@ -444,8 +477,8 @@ TOML
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           for attempt in 1 2 3 4 5; do
-            git add site-data/leaderboard.json
-            git commit -m "leaderboard: add issue #${{ github.event.issue.number }}" || true
+            git add site-data/leaderboard.json solutions/
+            git commit -m "leaderboard + solution: issue #${{ github.event.issue.number }}" || true
             if git push; then
               break
             fi

@@ -68,6 +68,8 @@ scripts/
   generate_check.py        # per-problem signature + axiom shim
 site-data/
   leaderboard.json         # public leaderboard; consumed by the React UI
+solutions/                 # archived copy of every accepted proof, committed
+                           # by CI as solutions/<problem>_r<param>_issue<N>[.lean]
 ```
 
 ## Schema of `site-data/leaderboard.json`
