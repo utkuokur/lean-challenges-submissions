@@ -1,13 +1,22 @@
 #!/usr/bin/env python3
 """Generate Challenges/Check.lean for a given problem_id.
 
-The Check.lean file asserts that `Submission.challenge_N` has the exact
-canonical type from `Challenges/challenge_NN.lean` (with the canonical
-parameter `r` substituted by `Submission.r` for non-universal problems).
-If the user's theorem has the wrong signature, `lake build Challenges.Check`
-fails with a type error.
+The Check.lean file asserts two things about the submission:
 
-This closes the `theorem challenge_N : True := trivial` bypass.
+1. *Signature.* `Submission.challenge_N` has the exact canonical type from
+   `Challenges/challenge_NN.lean` (with the canonical parameter `r`
+   substituted by `Submission.r` for non-universal problems). If the
+   theorem has the wrong signature, `lake build Challenges.Check` fails
+   with a type error. Closes the `theorem challenge_N : True := trivial`
+   bypass.
+
+2. *Axioms.* `Submission.challenge_N` transitively depends only on Lean's
+   three foundational axioms (`propext`, `Classical.choice`, `Quot.sound`).
+   Any other axiom — `sorryAx`, user-declared axioms, anything reached via
+   the kernel — causes the build to fail. Closes bypasses that slip past
+   the textual `sorry`/`axiom` greps (most notably `theorem ... := sorryAx _ _`,
+   which the source-level grep `(^|[^[:alnum:]_])sorry([^[:alnum:]_]|$)`
+   does not match because `sorryAx` is followed by `A`).
 
 Usage:
     python3 generate_check.py --problem challenge_1 --output Challenges/Check.lean
@@ -15,6 +24,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 
 
@@ -348,12 +358,84 @@ example :
 }
 
 
+# ─── Axiom-check appendix ─────────────────────────────────────────────────
+#
+# A custom `elab` command that fails the build if the named declaration
+# transitively depends on anything outside Lean's three foundational axioms.
+# Uses `Lean.collectAxioms`, the same primitive that backs `#print axioms`.
+#
+# Two pieces are emitted:
+#   - `import Lean` (must go *above* the canonical/Submission imports so it
+#     stays in the file's import block).
+#   - the elaborator definition + the actual invocation, appended after the
+#     `example` so the signature check runs first and the axiom check sees
+#     a fully-elaborated `Submission.challenge_N`.
+
+AXIOM_CHECK_IMPORT = "import Lean\n"
+
+AXIOM_CHECK_TAIL = r"""
+section AxiomCheck
+open Lean Elab Command
+
+/-- Build-time check that `n` transitively depends only on Lean's three
+foundational axioms. Mirrors `#print axioms` but turns any non-permitted
+axiom into a build error instead of stdout output.
+
+Uses `Lean.collectAxioms`, the public function (Lean 4.30, in
+`Lean/Util/CollectAxioms.lean`) that backs `#print axioms`. It returns
+the axiom array directly via any monad with `MonadEnv`, so calling it
+inside `CommandElabM` is straightforward. -/
+elab "#assert_canonical_axioms " n:ident : command => do
+  let name := n.getId
+  unless ((← getEnv).find? name).isSome do
+    throwError m!"`{name}` is not defined; cannot check axioms."
+  let axs ← Lean.collectAxioms name
+  let permitted : List Lean.Name :=
+    [``propext, ``Classical.choice, ``Quot.sound]
+  for ax in axs do
+    unless permitted.contains ax do
+      throwError m!"Submission depends on non-permitted axiom `{ax}`.\n\
+        Only Lean's foundational axioms \
+        (propext, Classical.choice, Quot.sound) are allowed."
+
+end AxiomCheck
+
+-- Suppress Mathlib's `hashCommand` linter (enabled via lakefile's
+-- `weak.linter.mathlibStandardSet`) just for this invocation, so the build
+-- log stays clean. The linter warns about `#`-commands in library code; we
+-- legitimately want one here.
+set_option linter.hashCommand false in
+#assert_canonical_axioms Submission.challenge_%N%
+"""
+
+
+def problem_number(problem_id: str) -> int:
+    """Extract the leading numeric component of a problem id.
+
+    `challenge_1` -> 1, `challenge_10_univ_disprove` -> 10. The user's
+    theorem is always named `Submission.challenge_<N>` regardless of the
+    univ/disprove suffix, because the suffix only selects which canonical
+    file we pin the signature against.
+    """
+    m = re.match(r"^challenge_(\d+)(?:_univ(?:_disprove)?)?$", problem_id)
+    if not m:
+        sys.exit(f"Cannot extract problem number from {problem_id!r}")
+    return int(m.group(1))
+
+
 def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--problem", required=True,
                    help="problem id, e.g. challenge_1 or challenge_3_univ")
     p.add_argument("--output", required=True,
                    help="path to write Check.lean")
+    p.add_argument("--submission-module",
+                   default="Challenges.Submission",
+                   help="Lean module that defines `Submission.challenge_N`. "
+                        "Default `Challenges.Submission` for the single-file "
+                        "gist flow (CI emits a wrapped file there); use "
+                        "`Submission.Main` for the repo flow (user's Lake lib "
+                        "lives at the project root).")
     args = p.parse_args()
 
     template = CHECKS.get(args.problem)
@@ -361,11 +443,29 @@ def main() -> int:
         sys.exit(f"Unknown problem id: {args.problem!r}. "
                  f"Known: {', '.join(sorted(CHECKS))}")
 
-    body = template.lstrip("\n")
+    # Every template hardcodes `import Challenges.Submission` — rewrite to
+    # the caller-supplied module so the same templates serve both submission
+    # flows. We deliberately match the import line as a literal, not a regex,
+    # so a stray occurrence in an `example` body would not be touched.
+    template = template.replace(
+        "import Challenges.Submission",
+        f"import {args.submission_module}",
+    )
+
+    n = problem_number(args.problem)
+    # Use `.replace`, not `.format`, because the tail contains Lean's
+    # `m!"...{ax}..."` interpolation. `.format` would try to substitute
+    # the Lean braces and crash.
+    body = (
+        AXIOM_CHECK_IMPORT
+        + template.lstrip("\n")
+        + AXIOM_CHECK_TAIL.replace("%N%", str(n))
+    )
     with open(args.output, "w", encoding="utf-8") as f:
         f.write(body)
-    print(f"Wrote signature check for {args.problem} to {args.output} "
-          f"({len(body)} bytes)")
+    print(f"Wrote signature + axiom check for {args.problem} to "
+          f"{args.output} ({len(body)} bytes, "
+          f"submission-module={args.submission_module})")
     return 0
 
 

@@ -1,0 +1,134 @@
+name: Submit a proof (from a GitHub repo)
+description: Submit a Lean 4 proof that spans multiple files, hosted in a public GitHub repo.
+title: "[submission] "
+labels:
+  - submission
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Submit a Lean 4 proof that spans multiple files. Use this form
+        when your solution has helper definitions or lemmas split across
+        several `.lean` files. For a single-file proof, use the "Submit a
+        proof" form instead — it has less boilerplate.
+
+        Your repo must contain a top-level directory called `Submission/`
+        with at least `Submission/Main.lean` in it. Inside `Main.lean`,
+        define `r` and `theorem challenge_N` inside `namespace Submission`.
+        Helper files go alongside as `Submission/<Name>.lean` and you import
+        them with `import Submission.<Name>`. CI will copy your `Submission/`
+        directory into the canonical project and build
+        `Challenges.Check`, which type-checks your theorem against the
+        canonical signature and rejects any non-foundational axiom usage.
+
+  - type: input
+    id: repo_url
+    attributes:
+      label: Repository URL
+      description: Public HTTPS URL of your GitHub repo.
+      placeholder: https://github.com/me/my-proofs
+    validations:
+      required: true
+
+  - type: input
+    id: repo_ref
+    attributes:
+      label: Git ref
+      description: Branch, tag, or commit SHA to evaluate. Defaults to `main`.
+      placeholder: main
+    validations:
+      required: false
+
+  - type: dropdown
+    id: problem_id
+    attributes:
+      label: Problem
+      description: Which challenge are you targeting?
+      options:
+        - challenge_1
+        - challenge_2
+        - challenge_3
+        - challenge_4
+        - challenge_5
+        - challenge_6
+        - challenge_7
+        - challenge_8
+        - challenge_9
+        - challenge_10
+        - challenge_1_univ
+        - challenge_2_univ
+        - challenge_3_univ
+        - challenge_4_univ
+        - challenge_5_univ
+        - challenge_6_univ
+        - challenge_7_univ
+        - challenge_8_univ
+        - challenge_9_univ
+        - challenge_10_univ
+        - challenge_1_univ_disprove
+        - challenge_2_univ_disprove
+        - challenge_3_univ_disprove
+        - challenge_4_univ_disprove
+        - challenge_5_univ_disprove
+        - challenge_6_univ_disprove
+        - challenge_7_univ_disprove
+        - challenge_8_univ_disprove
+        - challenge_9_univ_disprove
+        - challenge_10_univ_disprove
+    validations:
+      required: true
+
+  - type: dropdown
+    id: claim
+    attributes:
+      label: Claim
+      description: Are you proving or disproving?
+      options:
+        - prove
+        - disprove
+    validations:
+      required: true
+
+  - type: input
+    id: parameter
+    attributes:
+      label: Chosen parameter r
+      description: The r your proof establishes. For universal challenges, write "universal".
+      placeholder: e.g. 5
+    validations:
+      required: true
+
+  - type: input
+    id: nickname
+    attributes:
+      label: Nickname
+      description: Display name for the leaderboard.
+      placeholder: lean_enjoyer
+    validations:
+      required: true
+
+  - type: input
+    id: full_name
+    attributes:
+      label: Full name (optional)
+      description: Shown next to your nickname if provided.
+    validations:
+      required: false
+
+  - type: textarea
+    id: production_description
+    attributes:
+      label: How this proof was produced (optional)
+      description: Brief notes on how the proof was produced.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: acknowledgements
+    attributes:
+      label: Acknowledgements
+      options:
+        - label: I understand the CI will shallow-clone the repo above at the given ref and run lake build against the canonical environment.
+          required: true
+        - label: I understand my nickname, name, problem, claim, and parameter will be published on the public leaderboard.
+          required: true

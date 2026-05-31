@@ -25,16 +25,18 @@ concurrency:
 
 jobs:
   evaluate:
-    # Gate on the issue body having the `### Submission URL` section
-    # the template emits. This makes routing label-independent: any
-    # issue opened from the form triggers evaluation, while ad-hoc
-    # off-topic issues (bug reports, questions) are silently ignored.
-    # For the `labeled` trigger we ALSO require the label to actually be
-    # `submission`, so other labels (`triage`, `wontfix`, ...) don't
-    # re-fire the workflow.
+    # Gate on the issue body having either the single-file form's
+    # `### Submission URL` section OR the repo form's `### Repository URL`
+    # section. This routes both submission templates here and silently
+    # ignores ad-hoc off-topic issues. For the `labeled` trigger we ALSO
+    # require the label to actually be `submission`, so other labels
+    # (`triage`, `wontfix`, ...) don't re-fire the workflow.
     if: |
       github.event.issue.state == 'open'
-      && contains(github.event.issue.body, '### Submission URL')
+      && (
+        contains(github.event.issue.body, '### Submission URL')
+        || contains(github.event.issue.body, '### Repository URL')
+      )
       && (
         github.event.action == 'opened'
         || github.event.action == 'reopened'
@@ -65,7 +67,8 @@ jobs:
       # 1. Parse issue body
       #
       # GitHub Issue Forms render each field as a `### Label` section
-      # followed by the value. We extract the seven fields by header.
+      # followed by the value. We extract the fields by header and
+      # detect which submission template was used (gist vs repo).
       # ───────────────────────────────────────────────────────────────
       - name: Parse issue body
         id: parse
@@ -86,7 +89,24 @@ jobs:
                   return ""
               return m.group("v").strip()
 
-          source_url = extract("Submission URL")
+          # Detect submission mode by which URL field the template emitted.
+          # `gist` is the single-file flow (curl one .lean); `repo` is the
+          # multi-file flow (shallow git clone, splice Submission/ dir).
+          if "### Repository URL" in body:
+              mode = "repo"
+              source_url = ""
+              repo_url = extract("Repository URL")
+              repo_ref = extract("Git ref", required=False) or "main"
+          elif "### Submission URL" in body:
+              mode = "gist"
+              source_url = extract("Submission URL")
+              repo_url = ""
+              repo_ref = ""
+          else:
+              sys.exit("issue body has neither '### Submission URL' "
+                       "nor '### Repository URL' — was it filed via the "
+                       "submission template?")
+
           problem_raw = extract("Problem")
           claim = extract("Claim")
           parameter = extract("Chosen parameter r")
@@ -120,7 +140,10 @@ jobs:
 
           # Strip newlines from single-line fields so GITHUB_OUTPUT
           # multiline syntax isn't needed for them.
-          single = {"source_url": source_url, "problem_id": problem_id,
+          single = {"mode": mode,
+                    "source_url": source_url,
+                    "repo_url": repo_url, "repo_ref": repo_ref,
+                    "problem_id": problem_id,
                     "module": module, "claim": claim,
                     "parameter": parameter, "nickname": nickname,
                     "name": name}
@@ -135,10 +158,11 @@ jobs:
           PY
 
       # ───────────────────────────────────────────────────────────────
-      # 2. Fetch the user's .lean file
+      # 2a. Fetch the user's .lean file (gist mode only)
       # ───────────────────────────────────────────────────────────────
       - name: Fetch submitted .lean file
         id: fetch
+        if: steps.parse.outputs.mode == 'gist'
         env:
           URL: ${{ steps.parse.outputs.source_url }}
         run: |
@@ -182,6 +206,66 @@ jobs:
           echo "Fetched $(wc -c < /tmp/submission.lean) bytes."
 
       # ───────────────────────────────────────────────────────────────
+      # 2b. Shallow-clone the user's repo (repo mode only)
+      #
+      # Mirrors the gist flow's safety checks but over an entire
+      # `Submission/` directory rather than a single file:
+      #   - validate `Submission/Main.lean` exists (the convention),
+      #   - strip comments and grep every `.lean` for `sorry` / `axiom`,
+      #   - copy `Submission/` into the canonical checkout,
+      #   - register a `Submission` lib in lean-challenge/lakefile.toml so
+      #     Lake builds the user's files alongside the canonical Challenges
+      #     lib.
+      # ───────────────────────────────────────────────────────────────
+      - name: Clone submission repo
+        id: clone
+        if: steps.parse.outputs.mode == 'repo'
+        env:
+          URL: ${{ steps.parse.outputs.repo_url }}
+          REF: ${{ steps.parse.outputs.repo_ref }}
+        run: |
+          set -e
+          if ! git clone --depth 1 --branch "$REF" "$URL" /tmp/user-repo; then
+            echo "FETCH_ERROR=Could not clone \`$URL\` at ref \`$REF\`. Make sure the repo is public and the ref exists." >> "$GITHUB_ENV"
+            exit 1
+          fi
+          if [ ! -f /tmp/user-repo/Submission/Main.lean ]; then
+            echo "FETCH_ERROR=Repository must contain \`Submission/Main.lean\` at the root. See the repo submission template for the expected layout." >> "$GITHUB_ENV"
+            exit 1
+          fi
+          # Run the same content checks as the gist flow, over every .lean
+          # file under Submission/. Each file gets its own stripped copy.
+          while IFS= read -r f; do
+            python3 - "$f" > /tmp/stripped.lean <<'PY'
+          import re, sys
+          src = open(sys.argv[1]).read()
+          src = re.sub(r'/-[\s\S]*?-/', '', src)
+          src = re.sub(r'--[^\n]*', '', src)
+          sys.stdout.write(src)
+          PY
+            if grep -nE '(^|[^[:alnum:]_])sorry([^[:alnum:]_]|$)' /tmp/stripped.lean; then
+              rel="${f#/tmp/user-repo/}"
+              echo "FETCH_ERROR=\`$rel\` contains \`sorry\`. All proofs must be complete." >> "$GITHUB_ENV"
+              exit 1
+            fi
+            if grep -nE '^[[:space:]]*(noncomputable[[:space:]]+)?axiom[[:space:]]' /tmp/stripped.lean; then
+              rel="${f#/tmp/user-repo/}"
+              echo "FETCH_ERROR=\`$rel\` declares an \`axiom\`. Only Mathlib's foundational axioms (propext, Classical.choice, Quot.sound) are permitted; you cannot introduce new ones." >> "$GITHUB_ENV"
+              exit 1
+            fi
+          done < <(find /tmp/user-repo/Submission -type f -name '*.lean')
+          # Splice the user's Submission/ into the canonical checkout as a
+          # sibling Lake lib of `Challenges`. The user's `import Submission.X`
+          # statements resolve identically here and in their local checkout.
+          cp -r /tmp/user-repo/Submission lean-challenge/Submission
+          cat >> lean-challenge/lakefile.toml <<'TOML'
+
+[[lean_lib]]
+name = "Submission"
+TOML
+          echo "Spliced $(find lean-challenge/Submission -name '*.lean' | wc -l) Lean file(s) into canonical checkout from $URL@$REF."
+
+      # ───────────────────────────────────────────────────────────────
       # 3. Install elan + Lean toolchain
       # ───────────────────────────────────────────────────────────────
       - name: Install elan
@@ -200,8 +284,14 @@ jobs:
       #    one in Challenges/challenge_NN.lean (with `r` substituted
       #    by Submission.r), `lake build Challenges.Check` fails to
       #    typecheck.
+      #
+      #    Repo-mode submissions skip the wrap step — the user already
+      #    namespaces their own code and we copy `Submission/` directly
+      #    into the canonical checkout. Only gist mode needs the
+      #    auto-wrap.
       # ───────────────────────────────────────────────────────────────
       - name: Wrap submission into Challenges/Submission.lean
+        if: steps.parse.outputs.mode == 'gist'
         run: |
           MODULE="${{ steps.parse.outputs.module }}"
           # The wrapper:
@@ -228,9 +318,18 @@ jobs:
 
       - name: Generate signature-shim Check.lean
         run: |
+          # Gist flow: the wrap step above wrote `Challenges/Submission.lean`,
+          # so Check imports `Challenges.Submission`. Repo flow: the user's
+          # files were spliced into the new `Submission` lib at the project
+          # root, so Check imports `Submission.Main`.
+          SUBMODULE="Challenges.Submission"
+          if [ "${{ steps.parse.outputs.mode }}" = "repo" ]; then
+            SUBMODULE="Submission.Main"
+          fi
           python3 scripts/generate_check.py \
             --problem "${{ steps.parse.outputs.problem_id }}" \
-            --output "lean-challenge/Challenges/Check.lean"
+            --output "lean-challenge/Challenges/Check.lean" \
+            --submission-module "$SUBMODULE"
 
       - name: Fetch Mathlib cache
         working-directory: lean-challenge
@@ -258,6 +357,14 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # In gist mode the source URL is the raw .lean URL. In repo mode
+          # we compose `<repo>/tree/<ref>` so the leaderboard link points
+          # at the user's submitted code at the exact ref CI evaluated.
+          if [ "${{ steps.parse.outputs.mode }}" = "repo" ]; then
+            SOURCE_URL="${{ steps.parse.outputs.repo_url }}/tree/${{ steps.parse.outputs.repo_ref }}"
+          else
+            SOURCE_URL="${{ steps.parse.outputs.source_url }}"
+          fi
           python3 scripts/append_leaderboard.py \
             --leaderboard site-data/leaderboard.json \
             --nickname "${{ steps.parse.outputs.nickname }}" \
@@ -266,7 +373,7 @@ jobs:
             --claim "${{ steps.parse.outputs.claim }}" \
             --parameter "${{ steps.parse.outputs.parameter }}" \
             --issue "${{ github.event.issue.number }}" \
-            --source-url "${{ steps.parse.outputs.source_url }}"
+            --source-url "$SOURCE_URL"
 
           # Commit + push with a small retry loop so concurrent
           # submission runs don't clobber each other.
@@ -288,7 +395,7 @@ jobs:
               --claim "${{ steps.parse.outputs.claim }}" \
               --parameter "${{ steps.parse.outputs.parameter }}" \
               --issue "${{ github.event.issue.number }}" \
-              --source-url "${{ steps.parse.outputs.source_url }}"
+              --source-url "$SOURCE_URL"
           done
 
       - name: Comment success on issue
@@ -316,18 +423,23 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Pick the most specific reason we have evidence for. The
-          # FETCH_ERROR env var is set by the fetch step on sorry / axiom
-          # / URL failures. Otherwise we sniff the filesystem to see how
-          # far the run got before failing.
+          # FETCH_ERROR env var is set by the fetch / clone step on
+          # sorry / axiom / URL failures. Otherwise we sniff the
+          # filesystem to see how far the run got before failing.
+          # The "did we fetch?" sentinel differs by mode: gist mode
+          # writes /tmp/submission.lean; repo mode populates
+          # lean-challenge/Submission/.
           LOG_BLOCK=""
           if [ -n "${FETCH_ERROR:-}" ]; then
             REASON="$FETCH_ERROR"
           elif [ ! -d lean-challenge ]; then
             REASON="Could not check out the canonical challenges repository (\`utkuokur/lean-challenges@main\`). It may be private or temporarily unavailable. Please contact the maintainer."
-          elif [ ! -f /tmp/submission.lean ]; then
+          elif [ "${{ steps.parse.outputs.mode }}" = "gist" ] && [ ! -f /tmp/submission.lean ]; then
             REASON="Setup failed before the submission could be fetched. See workflow logs."
+          elif [ "${{ steps.parse.outputs.mode }}" = "repo" ] && [ ! -d lean-challenge/Submission ]; then
+            REASON="Setup failed before the submission repo could be cloned. See workflow logs."
           elif [ -f /tmp/build.log ]; then
-            REASON="\`lake build\` of the signature shim failed. Most commonly: your theorem's type does not match the canonical \`challenge_N\` signature (substituting your \`Submission.r\` for \`r\`). The tail of the build log is below."
+            REASON="\`lake build\` of the signature shim failed. Most commonly: your theorem's type does not match the canonical \`challenge_N\` signature (substituting your \`Submission.r\` for \`r\`), OR your proof depends on a non-permitted axiom. The tail of the build log is below."
             TAIL=$(tail -c 4000 /tmp/build.log)
             LOG_BLOCK=$'\n\n<details><summary>Build log (tail)</summary>\n\n```\n'"$TAIL"$'\n```\n\n</details>'
           else
