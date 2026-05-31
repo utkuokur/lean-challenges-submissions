@@ -8,16 +8,38 @@ name: Evaluate submission
 
 on:
   issues:
-    types: [labeled]
+    # `opened` is the load-bearing trigger — it fires automatically
+    # when a user submits the issue form, no label required. `labeled`
+    # is kept so a maintainer can manually re-fire evaluation by
+    # toggling the `submission` label off and on (useful when iterating
+    # on the workflow itself). `reopened` lets a closed issue be
+    # re-evaluated without filing a brand-new one.
+    types: [opened, labeled, reopened]
 
 concurrency:
   # Per-issue group so concurrent submissions don't cancel each other.
+  # Two runs on the same issue (e.g. opened + auto-labeled both firing)
+  # serialize rather than duplicate.
   group: submission-issue-${{ github.event.issue.number }}
   cancel-in-progress: false
 
 jobs:
   evaluate:
-    if: github.event.label.name == 'submission'
+    # Gate on the issue body having the `### Submission URL` section
+    # the template emits. This makes routing label-independent: any
+    # issue opened from the form triggers evaluation, while ad-hoc
+    # off-topic issues (bug reports, questions) are silently ignored.
+    # For the `labeled` trigger we ALSO require the label to actually be
+    # `submission`, so other labels (`triage`, `wontfix`, ...) don't
+    # re-fire the workflow.
+    if: |
+      github.event.issue.state == 'open'
+      && contains(github.event.issue.body, '### Submission URL')
+      && (
+        github.event.action == 'opened'
+        || github.event.action == 'reopened'
+        || (github.event.action == 'labeled' && github.event.label.name == 'submission')
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
