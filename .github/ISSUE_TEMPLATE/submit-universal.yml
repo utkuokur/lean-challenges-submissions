@@ -12,18 +12,10 @@ body:
         parameters. If you're settling a specific value of `r`, use the
         "Submit a proof for a specific r" form instead.
 
-        Fill in **exactly one** of "Submission URL" or "Repository URL":
-
-        - **Submission URL** for a single `.lean` file at a public raw
-          URL (a gist, or a `raw.githubusercontent.com/...` link).
-        - **Repository URL** for multi-file submissions hosted in a
-          public GitHub repo. Your repo must contain
-          `Submission/Main.lean` (with `theorem challenge_N` inside
-          `namespace Submission`), plus any helpers as
-          `Submission/<Name>.lean`.
-
-        AI-assisted, human, or hybrid proofs are all fine — we don't
-        ask how the proof was produced.
+        New to submitting? See the [submission guide on the
+        website](https://utkuokur.github.io/lean-challenges/#submit) for
+        how to provide your proof (single file vs. repository) and what
+        the CI checks.
 
   - type: input
     id: source_url
