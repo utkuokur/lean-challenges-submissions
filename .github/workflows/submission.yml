@@ -158,6 +158,47 @@ jobs:
           PY
 
       # ───────────────────────────────────────────────────────────────
+      # 1b. Reject duplicate (problem, r) submissions
+      #
+      # Once any user lands an accepted entry for a given (problem, r)
+      # pair, the question is mathematically settled — both prove and
+      # disprove directions are decided. We block any later submission
+      # against the same pair, regardless of claim, regardless of mode
+      # (gist or repo). For universal challenges `parameter` is the
+      # literal string "universal", so the same rule blocks duplicate
+      # universal submissions automatically.
+      #
+      # No race-handling: two submissions for the same r in flight at
+      # the same time can both pass this check and both end up on the
+      # leaderboard. That's intentional — joint credit if you tie.
+      # ───────────────────────────────────────────────────────────────
+      - name: Reject duplicate (problem, r)
+        env:
+          PROBLEM_ID: ${{ steps.parse.outputs.problem_id }}
+          PARAMETER: ${{ steps.parse.outputs.parameter }}
+        run: |
+          DUPE=$(python3 - <<'PY'
+          import json, os, pathlib, sys
+          p = pathlib.Path("site-data/leaderboard.json")
+          if not p.exists() or p.stat().st_size == 0:
+              sys.exit(0)
+          data = json.loads(p.read_text(encoding="utf-8"))
+          problem_id = os.environ["PROBLEM_ID"]
+          parameter = os.environ["PARAMETER"]
+          for e in data.get("entries", []):
+              if e.get("problem") == problem_id \
+                 and e.get("parameter") == parameter:
+                  print(f"issue #{e.get('issue', '?')} by "
+                        f"{e.get('nickname', '?')}")
+                  break
+          PY
+          )
+          if [ -n "$DUPE" ]; then
+            echo "FETCH_ERROR=Challenge \`$PROBLEM_ID\` at r = \`$PARAMETER\` has already been settled ($DUPE). Pick a different r." >> "$GITHUB_ENV"
+            exit 1
+          fi
+
+      # ───────────────────────────────────────────────────────────────
       # 2a. Fetch the user's .lean file (gist mode only)
       # ───────────────────────────────────────────────────────────────
       - name: Fetch submitted .lean file
