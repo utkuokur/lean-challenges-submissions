@@ -17,11 +17,17 @@ body:
         how to provide your proof (single file vs. repository) and what
         the CI checks.
 
+        **Keeping your proof private?** Submit a **private GitHub repo**
+        (the Repository URL field) and install the `lean-challenge-bot`
+        GitHub App on it — install link is in this repo's README — so the
+        CI can clone it. Your source is never published: only your
+        leaderboard row is. A single-file Submission URL must be public.
+
   - type: input
     id: source_url
     attributes:
       label: Submission URL
-      description: Raw URL to a single `.lean` file. Leave blank if submitting a repo.
+      description: Raw URL to a single, PUBLIC `.lean` file. Leave blank if submitting a repo (use a repo to keep your proof private).
       placeholder: https://raw.githubusercontent.com/me/my-proofs/main/challenge_01.lean
     validations:
       required: false
@@ -30,7 +36,7 @@ body:
     id: repo_url
     attributes:
       label: Repository URL
-      description: Public HTTPS URL of your GitHub repo. Leave blank if submitting a single file.
+      description: HTTPS URL of your GitHub repo — public, or PRIVATE with the `lean-challenge-bot` App installed (see README). Leave blank if submitting a single file.
       placeholder: https://github.com/me/my-proofs
     validations:
       required: false
@@ -96,5 +102,7 @@ body:
       options:
         - label: I understand the CI will fetch the URL (or shallow-clone the repo) above and run `lake build` against the canonical environment.
           required: true
-        - label: I understand my nickname, name, problem, claim, and parameter will be published on the public leaderboard.
+        - label: I understand my nickname, name, problem, claim, and parameter will be published on the public leaderboard (but not my proof source).
+          required: true
+        - label: I understand that an encrypted copy of my submission source is retained indefinitely in a private audit repository, decryptable only by the maintainers listed in `.audit/recipients.txt`, for soundness auditing.
           required: true

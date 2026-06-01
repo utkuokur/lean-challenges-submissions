@@ -23,8 +23,9 @@ Each form lets you submit one of two ways. Fill in **exactly one** of:
   or a `raw.githubusercontent.com/...` link). CI strips comments,
   rejects bare `sorry` / `axiom` declarations, wraps the file in
   `namespace Submission`, and builds.
-- **Repository URL** — multi-file submission hosted in a public GitHub
-  repo. Your repo must contain:
+- **Repository URL** — multi-file submission hosted in a GitHub repo
+  (public, or **private** with the `lean-challenge-bot` App installed —
+  see "Keeping your proof private" below). Your repo must contain:
 
   ```
   Submission/
@@ -42,8 +43,33 @@ Both paths generate a per-problem `Challenges/Check.lean` that
 (substituting `Submission.r` for `r`), and (2) asserts via
 `Lean.collectAxioms` that the proof only depends on Lean's three
 foundational axioms (`propext`, `Classical.choice`, `Quot.sound`). If
-either check fails, the issue is closed with the compiler output. On
-success, an entry is appended to `site-data/leaderboard.json`.
+either check fails, the issue is closed with a generic reason (the full
+build log stays in the maintainer-visible workflow run, not in the
+issue). On success, an entry is appended to `site-data/leaderboard.json`
+— **your proof source itself is never published** (see below).
+
+## Keeping your proof private
+
+You can keep your proof source hidden from other contestants while still
+appearing on the leaderboard:
+
+1. Host your proof in a **private** GitHub repo (use the *Repository URL*
+   field, not a single-file URL — single files must be public).
+2. Install the **`lean-challenge-bot`** GitHub App on that repo so the CI
+   can clone it: **<https://github.com/apps/lean-challenge-bot>**.
+
+What is and isn't visible:
+
+- **Other contestants** see only your leaderboard row (nickname, name,
+  problem, claim, parameter). For a private submission `source_url` is
+  empty — there is no link to your code.
+- **You** keep your code in your own private repo.
+- **Maintainers** can see it: the CI reads it to verify the proof, and an
+  age-encrypted copy is retained in a private audit repo, decryptable
+  only by the maintainers listed in
+  [`.audit/recipients.txt`](.audit/recipients.txt). This is the cost of
+  server-side verification — see [`SECURITY.md`](SECURITY.md), which also
+  documents the limits of this confidentiality (it is best-effort).
 
 Once any submission has settled a given (problem, r) pair, later
 submissions for the same pair are rejected — both directions are
@@ -56,21 +82,32 @@ the proof was produced.
 ## Repository layout
 
 ```
+.audit/
+  recipients.txt           # age recipients for the encrypted audit archive
+  README.md
 .github/
   ISSUE_TEMPLATE/
     config.yml             # disable blank issues
     submit-specific.yml    # specific-r submission form
     submit-universal.yml   # universal (∀r) submission form
   workflows/
-    submission.yml         # triggered on submission issue events
+    submission.yml         # evaluate → archive → record → notify
+    validate-recipients.yml # lints .audit/recipients.txt
+docs/
+  audit-archive.md         # encrypted-archive design + decryption
+  ci-secrets.md            # GitHub Apps, audit repo, one-time setup
 scripts/
   append_leaderboard.py    # appends one entry to site-data/leaderboard.json
+  archive_submission.py    # age-encrypts source + pushes to the private audit repo
   generate_check.py        # per-problem signature + axiom shim
 site-data/
   leaderboard.json         # public leaderboard; consumed by the React UI
-solutions/                 # archived copy of every accepted proof, committed
-                           # by CI as solutions/<problem>_r<param>_issue<N>[.lean]
+SECURITY.md                # confidentiality / threat model
 ```
+
+Accepted proofs are **no longer** committed in plaintext here. Instead an
+age-encrypted copy of every evaluated submission is pushed to the private
+`utkuokur/lean-challenges-audit` repo (see `docs/audit-archive.md`).
 
 ## Schema of `site-data/leaderboard.json`
 
@@ -86,11 +123,15 @@ solutions/                 # archived copy of every accepted proof, committed
       "parameter": "5",          // or "universal" for ∀r challenges
       "date": "2026-05-30T12:34:56Z",
       "issue": 42,
-      "source_url": "https://raw.githubusercontent.com/.../challenge_01.lean"
+      "source_url": "https://raw.githubusercontent.com/.../challenge_01.lean",
+      "submission_public": true   // false for private submissions; source_url is then ""
     }
   ]
 }
 ```
+
+> The React frontend should treat an empty `source_url` as "no source
+> link" (private submission) rather than rendering a broken link.
 
 The React frontend at
 [utkuokur/lean-challenge/automated_compile](https://github.com/utkuokur/lean-challenge/tree/universal-challenges/automated_compile)
@@ -98,12 +139,26 @@ fetches this file directly via
 `raw.githubusercontent.com/.../site-data/leaderboard.json` and renders
 the table.
 
-## Required secrets
+## Required setup and secrets
 
-The default `GITHUB_TOKEN` is sufficient. No PAT, no GitHub App
-installation is required. The workflow needs:
+Private submissions + the encrypted audit archive need one-time setup
+beyond the default `GITHUB_TOKEN`. The full checklist is in
+[`docs/ci-secrets.md`](docs/ci-secrets.md); in brief:
 
-- `contents: write` — to commit updates to `site-data/leaderboard.json`
-- `issues: write` — to comment on and close the submission issue
+- **`lean-challenge-bot`** GitHub App (Contents: Read, installable on any
+  account) — lets CI clone private submission repos. Secrets:
+  `LEAN_CHALLENGE_BOT_APP_ID`, `LEAN_CHALLENGE_BOT_PRIVATE_KEY`.
+- **`lean-challenge-archiver`** GitHub App (Contents: R/W, on this
+  account only) — pushes the encrypted archive. Secrets:
+  `LEAN_CHALLENGE_ARCHIVER_APP_ID`, `LEAN_CHALLENGE_ARCHIVER_PRIVATE_KEY`.
+- a **private `utkuokur/lean-challenges-audit`** repo, and at least one
+  age recipient public key in `.audit/recipients.txt`.
 
-Both are declared in `submission.yml` and granted to the default token.
+The default `GITHUB_TOKEN` still covers the leaderboard commit
+(`contents: write`) and issue comment/close (`issues: write`) in the
+`record` job — no recorder App or PAT is needed because this repo has no
+branch protection and hosts its own leaderboard.
+
+**Until the setup above is complete the pipeline is intentionally down**
+(the encrypt step fails on an empty recipients file, and `record` is
+gated on a successful archive).

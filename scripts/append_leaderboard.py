@@ -12,7 +12,8 @@ Schema matches what the React app at automated_compile/src/App.tsx reads:
           "parameter": str,        # e.g. "5" or "universal"
           "date": str,             # ISO-8601 UTC, second precision
           "issue": int,            # issue number on the submissions repo
-          "source_url": str },     # the URL the proof was fetched from
+          "source_url": str,       # public proof URL; "" for private submissions
+          "submission_public": bool }, # whether the source was public at eval time
         ... ] }
 
 Rank is assigned as `len(existing_entries) + 1` — i.e. monotonically
@@ -37,7 +38,13 @@ def main() -> int:
     p.add_argument("--claim", required=True)
     p.add_argument("--parameter", required=True)
     p.add_argument("--issue", required=True, type=int)
-    p.add_argument("--source-url", required=True)
+    # Optional: a private submission has no publishable source link, so
+    # the leaderboard entry carries an empty source_url for it.
+    p.add_argument("--source-url", default="")
+    p.add_argument("--submission-public", action=argparse.BooleanOptionalAction,
+                   default=True,
+                   help="whether the submission source was public at "
+                        "evaluation time. Private submissions omit source_url.")
     args = p.parse_args()
 
     path = pathlib.Path(args.leaderboard)
@@ -60,7 +67,10 @@ def main() -> int:
                   .replace(microsecond=0).isoformat()
                   .replace("+00:00", "Z"),
         "issue": args.issue,
-        "source_url": args.source_url,
+        # For a private submission the source is not published, so the
+        # link is empty; the UI should render no source link in that case.
+        "source_url": args.source_url if args.submission_public else "",
+        "submission_public": bool(args.submission_public),
     }
     data["entries"].append(entry)
 

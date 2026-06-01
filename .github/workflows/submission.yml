@@ -1,36 +1,40 @@
 name: Evaluate submission
 
-# Triggered when an issue is labeled `submission` (the issue template
-# applies the label automatically on creation). The job parses the issue
-# body, fetches the user's .lean file, copies it into a fresh checkout
-# of utkuokur/lean-challenge, runs `lake build` against the pinned
-# toolchain, and on success appends an entry to site-data/leaderboard.json.
+# Triggered when a submission issue is opened/labeled/reopened. The
+# `evaluate` job parses the issue body, fetches the user's submission
+# (a single .lean file at a public raw URL, or a — possibly PRIVATE —
+# GitHub repo cloned with the `lean-challenge-bot` App token), runs the
+# content checks + `lake build` signature shim against a fresh checkout
+# of utkuokur/lean-challenges, and — BEFORE building — encrypts the
+# fetched source for the audit archive.
+#
+# CONFIDENTIALITY MODEL (ported from leanprover/lean-eval-submissions).
+# The submission source is never published. Other contestants cannot see
+# it; the submitter (it's their repo) and the maintainers (who hold the
+# audit-archive private keys, and who can read the private audit repo)
+# can. The load-bearing invariants — read SECURITY.md before editing:
+#   * fetch + build live in ONE job, so the source never crosses a
+#     runner boundary as a downloadable artifact (public-repo artifacts
+#     are downloadable by anyone authenticated). Do NOT upload the
+#     plaintext source as an artifact, and do NOT split fetch from build.
+#   * the `lean-challenge-bot` installation token is scoped to the single
+#     `Fetch submission` step's env — never a job-level env/secret.
+#   * `persist-credentials: false` on both checkouts + `.git` stripped
+#     from both checkouts AND the user clone before `lake build` runs,
+#     so no token survives into the (un-sandboxed) Lean elaboration.
+#   * the audit ciphertext artifact is safe to upload: it is age-encrypted
+#     to .audit/recipients.txt and decryptable only by maintainers.
 
 on:
   issues:
-    # `opened` is the load-bearing trigger — it fires automatically
-    # when a user submits the issue form, no label required. `labeled`
-    # is kept so a maintainer can manually re-fire evaluation by
-    # toggling the `submission` label off and on (useful when iterating
-    # on the workflow itself). `reopened` lets a closed issue be
-    # re-evaluated without filing a brand-new one.
     types: [opened, labeled, reopened]
 
 concurrency:
-  # Per-issue group so concurrent submissions don't cancel each other.
-  # Two runs on the same issue (e.g. opened + auto-labeled both firing)
-  # serialize rather than duplicate.
   group: submission-issue-${{ github.event.issue.number }}
   cancel-in-progress: false
 
 jobs:
   evaluate:
-    # Gate on the issue body having the `### Problem` section every
-    # submission template emits. This routes all submission-form issues
-    # here and silently ignores ad-hoc off-topic issues. For the
-    # `labeled` trigger we ALSO require the label to actually be
-    # `submission`, so other labels (`triage`, `wontfix`, ...) don't
-    # re-fire the workflow.
     if: |
       github.event.issue.state == 'open'
       && contains(github.event.issue.body, '### Problem')
@@ -42,16 +46,24 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
-      # `contents: write` so we can push the updated leaderboard.json back.
-      contents: write
-      # `issues: write` so we can comment + close the submission issue.
+      # Read only: the leaderboard write happens in the `record` job. This
+      # job runs untrusted Lean, so it holds the minimum it needs (issue
+      # comments for inline rejections).
+      contents: read
       issues: write
+    outputs:
+      fetch_succeeded: ${{ steps.fetch_status.outputs.succeeded }}
+      size_within_cap: ${{ steps.size_status.outputs.within_cap }}
+      audit_ciphertext_ready: ${{ steps.audit_status.outputs.ready }}
+      build_succeeded: ${{ steps.build.outputs.ok }}
     steps:
       # ───────────────────────────────────────────────────────────────
-      # 0. Checkouts
+      # 0. Checkouts (persist-credentials:false on BOTH — see header)
       # ───────────────────────────────────────────────────────────────
       - name: Checkout submissions repo (this repo)
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Checkout lean-challenges build environment
         uses: actions/checkout@v4
@@ -59,29 +71,10 @@ jobs:
           repository: utkuokur/lean-challenges
           ref: main
           path: lean-challenge
+          persist-credentials: false
 
       # ───────────────────────────────────────────────────────────────
-      # 1. Parse issue body
-      #
-      # GitHub Issue Forms render each field as a `### Label` section
-      # followed by the value. The two submission templates
-      # (`submit-specific.yml`, `submit-universal.yml`) share most of
-      # their fields; we infer two orthogonal modes from the body:
-      #
-      #   - `mode` (gist | repo): which URL field the user filled.
-      #     Both templates expose both URL fields; we look at content,
-      #     not headers, since both headers always appear.
-      #
-      #   - `scope` (specific | universal): whether a `Chosen parameter
-      #     r` field is present. Only the specific-r form has it; in
-      #     the universal form `parameter` is implicitly "universal"
-      #     and the user instead picks `claim` = prove or disprove,
-      #     which is how the canonical-file pinning is chosen.
-      #
-      # In universal scope we map `problem_id` from `challenge_N` to
-      # `challenge_N_univ` (claim=prove) or `challenge_N_univ_disprove`
-      # (claim=disprove), so the rest of the pipeline (Check.lean
-      # template, signature shim) doesn't need to know about scope.
+      # 1. Parse issue body  (unchanged from the public pipeline)
       # ───────────────────────────────────────────────────────────────
       - name: Parse issue body
         id: parse
@@ -103,12 +96,8 @@ jobs:
               return m.group("v").strip()
 
           def normalize(v: str) -> str:
-              # "_No response_" is GitHub Issue Forms' rendering of an
-              # empty optional field; treat it as the empty string.
               return "" if v in ("", "_No response_") else v
 
-          # Both templates expose both URL fields; the user fills one
-          # and leaves the other blank. Disambiguate by content.
           source_url = normalize(extract("Submission URL", required=False))
           repo_url = normalize(extract("Repository URL", required=False))
           if source_url and repo_url:
@@ -125,17 +114,11 @@ jobs:
               repo_ref = normalize(
                   extract("Git ref", required=False)) or "main"
 
-          # Specific vs universal scope is signalled by the presence of
-          # the `Chosen parameter r` field, which only the specific
-          # template emits.
           parameter_raw = normalize(
               extract("Chosen parameter r", required=False))
           if parameter_raw:
               scope = "specific"
               parameter = parameter_raw
-              # The specific-r flow always proves at a single r; we don't
-              # ask the user. (The CHECKS table in generate_check.py
-              # only carries prove-direction templates for specific r.)
               claim = "prove"
           else:
               scope = "universal"
@@ -147,18 +130,11 @@ jobs:
           name = normalize(
               extract("Full name (optional)", required=False))
 
-          # The dropdown stores the bare id (challenge_N). For universal
-          # scope, append the suffix that picks the right canonical file.
           problem_id = problem_raw.split()[0].strip()
           if scope == "universal":
               problem_id = problem_id + (
                   "_univ_disprove" if claim == "disprove" else "_univ")
 
-          # Map problem_id -> on-disk module name. Problem ids use 1-digit
-          # numbering (challenge_1); on-disk files use 2-digit zero-padded
-          # numbering (challenge_01.lean). The `_disprove` suffix is only
-          # valid after `_univ` (only universal problems have a disprove
-          # direction in the canonical set).
           m = re.match(r"^challenge_(\d+)(_univ(?:_disprove)?)?$", problem_id)
           if not m:
               sys.exit(f"unrecognized problem id: {problem_id!r}")
@@ -166,8 +142,6 @@ jobs:
           suffix = m.group(2) or ""
           module = f"challenge_{n:02d}{suffix}"
 
-          # Strip newlines from single-line fields so GITHUB_OUTPUT
-          # multiline syntax isn't needed for them.
           single = {"mode": mode, "scope": scope,
                     "source_url": source_url,
                     "repo_url": repo_url, "repo_ref": repo_ref,
@@ -181,21 +155,42 @@ jobs:
           PY
 
       # ───────────────────────────────────────────────────────────────
-      # 1b. Reject duplicate (problem, r) submissions
-      #
-      # Once any user lands an accepted entry for a given (problem, r)
-      # pair, the question is mathematically settled — both prove and
-      # disprove directions are decided. We block any later submission
-      # against the same pair, regardless of claim, regardless of mode
-      # (gist or repo). For universal challenges `parameter` is the
-      # literal string "universal", so the same rule blocks duplicate
-      # universal submissions automatically.
-      #
-      # No race-handling: two submissions for the same r in flight at
-      # the same time can both pass this check and both end up on the
-      # leaderboard. That's intentional — joint credit if you tie.
+      # 1b. Extract owner (repo mode) so we can mint a scoped App token.
+      # ───────────────────────────────────────────────────────────────
+      - name: Extract submission owner
+        id: owner
+        if: steps.parse.outputs.mode == 'repo'
+        env:
+          URL: ${{ steps.parse.outputs.repo_url }}
+        run: |
+          # owner/repo from https://github.com/<owner>/<repo>[.git][/...]
+          OWNER_REPO=$(printf '%s' "$URL" \
+            | sed -E 's#^https?://github\.com/([^/]+)/([^/#?]+?)(\.git)?/?$#\1/\2#')
+          OWNER=${OWNER_REPO%%/*}
+          {
+            echo "owner=${OWNER}"
+            echo "owner_repo=${OWNER_REPO}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Mint lean-challenge-bot installation token
+        id: app_token
+        if: steps.parse.outputs.mode == 'repo'
+        uses: actions/create-github-app-token@v1
+        # continue-on-error: a public-repo submission whose owner has NOT
+        # installed the bot App still clones fine over an anonymous URL.
+        # Only a PRIVATE repo without the App truly fails — handled with
+        # an instructive message in the Fetch step.
+        continue-on-error: true
+        with:
+          app-id: ${{ secrets.LEAN_CHALLENGE_BOT_APP_ID }}
+          private-key: ${{ secrets.LEAN_CHALLENGE_BOT_PRIVATE_KEY }}
+          owner: ${{ steps.owner.outputs.owner }}
+
+      # ───────────────────────────────────────────────────────────────
+      # 1c. Reject duplicate (problem, r) submissions  (unchanged)
       # ───────────────────────────────────────────────────────────────
       - name: Reject duplicate (problem, r)
+        id: dup
         env:
           PROBLEM_ID: ${{ steps.parse.outputs.problem_id }}
           PARAMETER: ${{ steps.parse.outputs.parameter }}
@@ -222,117 +217,204 @@ jobs:
           fi
 
       # ───────────────────────────────────────────────────────────────
-      # 2a. Fetch the user's .lean file (gist mode only)
-      # ───────────────────────────────────────────────────────────────
-      - name: Fetch submitted .lean file
-        id: fetch
-        if: steps.parse.outputs.mode == 'gist'
-        env:
-          URL: ${{ steps.parse.outputs.source_url }}
-        run: |
-          set -e
-          if ! curl -fsSL --max-time 30 --max-filesize 1048576 \
-              -H "Accept: text/plain" "$URL" -o /tmp/submission.lean; then
-            echo "FETCH_ERROR=Could not fetch the submission URL." >> "$GITHUB_ENV"
-            exit 1
-          fi
-          # Strip Lean comments before content checks. Otherwise a benign
-          # comment like `-- proof avoids sorry by ...` would be rejected.
-          # Handles `-- line comments` and `/- block comments -/`. Nested
-          # block comments are not handled; in practice users do not nest.
-          python3 - <<'PY' > /tmp/submission-stripped.lean
-          import re
-          src = open('/tmp/submission.lean').read()
-          # Remove /- ... -/ block comments (non-greedy).
-          src = re.sub(r'/-[\s\S]*?-/', '', src)
-          # Remove -- line comments (everything up to end-of-line).
-          src = re.sub(r'--[^\n]*', '', src)
-          import sys; sys.stdout.write(src)
-          PY
-          # Reject `sorry`-containing proofs early (fast fail without
-          # invoking lake). Operates on the comment-stripped copy.
-          if grep -nE '(^|[^[:alnum:]_])sorry([^[:alnum:]_]|$)' /tmp/submission-stripped.lean; then
-            echo "FETCH_ERROR=Submission contains \`sorry\`. All proofs must be complete." >> "$GITHUB_ENV"
-            exit 1
-          fi
-          # Reject `axiom` declarations. The only axioms permitted in a
-          # submission are the foundational ones Mathlib already uses
-          # (propext, Classical.choice, Quot.sound); these come in
-          # transitively via imports and are not declared in the user's
-          # file. A user-introduced `axiom foo : <signature>` would
-          # otherwise let them "prove" anything by assertion.
-          # Matches both `axiom foo : ...` and `noncomputable axiom foo : ...`
-          # at the start of a logical line.
-          if grep -nE '^[[:space:]]*(noncomputable[[:space:]]+)?axiom[[:space:]]' /tmp/submission-stripped.lean; then
-            echo "FETCH_ERROR=Submission contains an \`axiom\` declaration. Only Mathlib's foundational axioms (propext, Classical.choice, Quot.sound) are permitted; you cannot introduce new ones." >> "$GITHUB_ENV"
-            exit 1
-          fi
-          echo "Fetched $(wc -c < /tmp/submission.lean) bytes."
-
-      # ───────────────────────────────────────────────────────────────
-      # 2b. Shallow-clone the user's repo (repo mode only)
+      # 2. Fetch submission. Produces:
+      #    /tmp/submission.lean              (gist mode, pre-wrapper file)
+      #    lean-challenge/Submission/        (repo mode, spliced lib)
+      #    /tmp/fetch-out/source.tar.gz      (the exact evaluated bytes)
+      #    /tmp/fetch-out/metadata.json      (record + audit metadata)
       #
-      # Mirrors the gist flow's safety checks but over an entire
-      # `Submission/` directory rather than a single file:
-      #   - validate `Submission/Main.lean` exists (the convention),
-      #   - strip comments and grep every `.lean` for `sorry` / `axiom`,
-      #   - copy `Submission/` into the canonical checkout,
-      #   - register a `Submission` lib in lean-challenge/lakefile.toml so
-      #     Lake builds the user's files alongside the canonical Challenges
-      #     lib.
+      # The App token is referenced ONLY here, step-scoped (see header).
       # ───────────────────────────────────────────────────────────────
-      - name: Clone submission repo
-        id: clone
-        if: steps.parse.outputs.mode == 'repo'
+      - name: Fetch submission
+        id: fetch
         env:
-          URL: ${{ steps.parse.outputs.repo_url }}
-          REF: ${{ steps.parse.outputs.repo_ref }}
+          APP_INSTALLATION_TOKEN: ${{ steps.app_token.outputs.token }}
+          MODE: ${{ steps.parse.outputs.mode }}
+          SOURCE_URL: ${{ steps.parse.outputs.source_url }}
+          REPO_URL: ${{ steps.parse.outputs.repo_url }}
+          REPO_REF: ${{ steps.parse.outputs.repo_ref }}
+          OWNER_REPO: ${{ steps.owner.outputs.owner_repo }}
+          # Passed via env (NOT `${{ }}` interpolation into the script) so
+          # free-form, user-controlled fields cannot inject shell/Python.
+          ISSUE: ${{ github.event.issue.number }}
+          PROBLEM_ID: ${{ steps.parse.outputs.problem_id }}
+          PARAMETER: ${{ steps.parse.outputs.parameter }}
+          CLAIM: ${{ steps.parse.outputs.claim }}
+          NICKNAME: ${{ steps.parse.outputs.nickname }}
+          NAME: ${{ steps.parse.outputs.name }}
+          MODULE: ${{ steps.parse.outputs.module }}
         run: |
           set -e
-          if ! git clone --depth 1 --branch "$REF" "$URL" /tmp/user-repo; then
-            echo "FETCH_ERROR=Could not clone \`$URL\` at ref \`$REF\`. Make sure the repo is public and the ref exists." >> "$GITHUB_ENV"
-            exit 1
-          fi
-          if [ ! -f /tmp/user-repo/Submission/Main.lean ]; then
-            echo "FETCH_ERROR=Repository must contain \`Submission/Main.lean\` at the root. See the repo submission template for the expected layout." >> "$GITHUB_ENV"
-            exit 1
-          fi
-          # Run the same content checks as the gist flow, over every .lean
-          # file under Submission/. Each file gets its own stripped copy.
-          while IFS= read -r f; do
-            python3 - "$f" > /tmp/stripped.lean <<'PY'
-          import re, sys
-          src = open(sys.argv[1]).read()
-          src = re.sub(r'/-[\s\S]*?-/', '', src)
-          src = re.sub(r'--[^\n]*', '', src)
-          sys.stdout.write(src)
-          PY
-            if grep -nE '(^|[^[:alnum:]_])sorry([^[:alnum:]_]|$)' /tmp/stripped.lean; then
-              rel="${f#/tmp/user-repo/}"
-              echo "FETCH_ERROR=\`$rel\` contains \`sorry\`. All proofs must be complete." >> "$GITHUB_ENV"
+          mkdir -p /tmp/fetch-out
+
+          if [ "$MODE" = "gist" ]; then
+            # ---- single PUBLIC .lean file ----
+            if ! curl -fsSL --max-time 30 --max-filesize 1048576 \
+                -H "Accept: text/plain" "$SOURCE_URL" -o /tmp/submission.lean; then
+              echo "FETCH_ERROR=Could not fetch the submission URL." >> "$GITHUB_ENV"
               exit 1
             fi
-            if grep -nE '^[[:space:]]*(noncomputable[[:space:]]+)?axiom[[:space:]]' /tmp/stripped.lean; then
-              rel="${f#/tmp/user-repo/}"
-              echo "FETCH_ERROR=\`$rel\` declares an \`axiom\`. Only Mathlib's foundational axioms (propext, Classical.choice, Quot.sound) are permitted; you cannot introduce new ones." >> "$GITHUB_ENV"
+            if ! MSG=$(python3 scripts/content_checks.py /tmp/submission.lean); then
+              echo "FETCH_ERROR=${MSG#ERROR: }" >> "$GITHUB_ENV"
               exit 1
             fi
-          done < <(find /tmp/user-repo/Submission -type f -name '*.lean')
-          # Splice the user's Submission/ into the canonical checkout as a
-          # sibling Lake lib of `Challenges`. The user's `import Submission.X`
-          # statements resolve identically here and in their local checkout.
-          cp -r /tmp/user-repo/Submission lean-challenge/Submission
-          cat >> lean-challenge/lakefile.toml <<'TOML'
+            export SUBMISSION_PUBLIC=true SUBMISSION_KIND=gist SUBMISSION_REPO=gist SUBMISSION_REF=
+            # source tarball = the single pre-wrapper file
+            tar -czf /tmp/fetch-out/source.tar.gz -C /tmp submission.lean
+            echo "Fetched $(wc -c < /tmp/submission.lean) bytes."
 
-[[lean_lib]]
-name = "Submission"
-TOML
-          echo "Spliced $(find lean-challenge/Submission -name '*.lean' | wc -l) Lean file(s) into canonical checkout from $URL@$REF."
+          else
+            # ---- multi-file repo (may be PRIVATE) ----
+            # Is the repo publicly cloneable? (anonymous ls-remote)
+            if git ls-remote "$REPO_URL" >/dev/null 2>&1; then
+              export SUBMISSION_PUBLIC=true
+            else
+              export SUBMISSION_PUBLIC=false
+            fi
+            # Prefer the App token (works for public AND private). Embed it
+            # in the clone URL; we strip .git afterwards so it never reaches
+            # the Lean elaboration.
+            if [ -n "${APP_INSTALLATION_TOKEN:-}" ]; then
+              CLONE_URL="https://x-access-token:${APP_INSTALLATION_TOKEN}@github.com/${OWNER_REPO}.git"
+            else
+              CLONE_URL="$REPO_URL"
+            fi
+            if ! git clone --depth 1 --branch "$REPO_REF" "$CLONE_URL" /tmp/user-repo 2>/dev/null; then
+              if [ "$SUBMISSION_PUBLIC" != "true" ]; then
+                echo "FETCH_ERROR=Could not clone the (private) repo \`$REPO_URL\` at ref \`$REPO_REF\`. Install the \`lean-challenge-bot\` GitHub App on it (link in the README) so CI can read it, then re-open this issue." >> "$GITHUB_ENV"
+              else
+                echo "FETCH_ERROR=Could not clone \`$REPO_URL\` at ref \`$REPO_REF\`. Check the URL and that the ref exists." >> "$GITHUB_ENV"
+              fi
+              exit 1
+            fi
+            export SUBMISSION_REF=$(git -C /tmp/user-repo rev-parse HEAD)
+            if [ ! -f /tmp/user-repo/Submission/Main.lean ]; then
+              echo "FETCH_ERROR=Repository must contain \`Submission/Main.lean\` at the root. See the repo submission template for the expected layout." >> "$GITHUB_ENV"
+              exit 1
+            fi
+            if ! MSG=$(python3 scripts/content_checks.py /tmp/user-repo/Submission); then
+              echo "FETCH_ERROR=${MSG#ERROR: }" >> "$GITHUB_ENV"
+              exit 1
+            fi
+            # Splice the user's Submission/ into the canonical checkout as a
+            # sibling Lake lib of `Challenges`.
+            cp -r /tmp/user-repo/Submission lean-challenge/Submission
+            printf '\n[[lean_lib]]\nname = "Submission"\n' >> lean-challenge/lakefile.toml
+            # source tarball = the evaluated Submission/ tree
+            tar -czf /tmp/fetch-out/source.tar.gz -C lean-challenge Submission
+            # Strip the token-bearing clone before any untrusted Lean runs.
+            rm -rf /tmp/user-repo/.git
+            export SUBMISSION_KIND=github_repo SUBMISSION_REPO="$OWNER_REPO"
+            echo "Spliced $(find lean-challenge/Submission -name '*.lean' | wc -l) Lean file(s) from $REPO_URL@$SUBMISSION_REF (public=$SUBMISSION_PUBLIC)."
+          fi
+
+          # Frozen metadata for the audit sidecar (encrypt) and the
+          # leaderboard (record job). Written by a committed helper that
+          # reads env vars and json.dumps them — user-controlled fields are
+          # escaped, not injected. source_url is the public link; the record
+          # job omits it from the leaderboard for private submissions.
+          python3 scripts/write_metadata.py /tmp/fetch-out/metadata.json
+
+      - name: Record fetch status for downstream jobs
+        id: fetch_status
+        if: always()
+        run: |
+          if [ "${{ steps.fetch.outcome }}" = "success" ]; then
+            echo "succeeded=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "succeeded=false" >> "$GITHUB_OUTPUT"
+          fi
 
       # ───────────────────────────────────────────────────────────────
-      # 3. Install elan + Lean toolchain
+      # 3. Audit-archive integration (BEFORE the expensive build, so a
+      #    size-cap failure rejects fast). age-encrypt the source tar to
+      #    .audit/recipients.txt and upload only the ciphertext + sidecar
+      #    (never the plaintext — see header).
       # ───────────────────────────────────────────────────────────────
+      - name: Check submission size cap
+        id: size_check
+        if: steps.fetch.outcome == 'success'
+        run: |
+          SIZE_BYTES=$(stat -c %s /tmp/fetch-out/source.tar.gz)
+          CAP_BYTES=$((10 * 1024 * 1024))
+          echo "submission tarball size: ${SIZE_BYTES} bytes (cap: ${CAP_BYTES})"
+          if [ "$SIZE_BYTES" -gt "$CAP_BYTES" ]; then
+            echo "FETCH_ERROR=Submission rejected: the compressed source tarball is $((SIZE_BYTES/1024)) KiB, over the 10240 KiB (10 MiB) audit-archive cap. Trim build artifacts or large files and resubmit." >> "$GITHUB_ENV"
+            exit 1
+          fi
+
+      - name: Record size-cap status for downstream jobs
+        id: size_status
+        if: always()
+        run: |
+          if [ "${{ steps.size_check.outcome }}" = "success" ]; then
+            echo "within_cap=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "within_cap=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install age (audit encryption)
+        if: steps.size_check.outcome == 'success'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq age
+
+      - name: Encrypt submission for audit archive
+        id: encrypt
+        if: steps.size_check.outcome == 'success'
+        run: |
+          mkdir -p /tmp/audit-encrypt
+          if ! python3 scripts/archive_submission.py encrypt \
+              --source-tar /tmp/fetch-out/source.tar.gz \
+              --metadata /tmp/fetch-out/metadata.json \
+              --recipients .audit/recipients.txt \
+              --output-dir /tmp/audit-encrypt; then
+            echo "FETCH_ERROR=Audit encryption failed — the submission was not evaluated. This is a maintainer-side configuration issue (likely an empty or invalid \`.audit/recipients.txt\`), not a problem with your proof." >> "$GITHUB_ENV"
+            exit 1
+          fi
+
+      - name: Upload audit ciphertext artifact
+        id: upload_audit
+        if: steps.encrypt.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: submission-audit-ciphertext
+          path: |
+            /tmp/audit-encrypt/source.tar.gz.age
+            /tmp/audit-encrypt/sidecar.partial.json
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Record audit-ciphertext readiness
+        id: audit_status
+        if: always()
+        run: |
+          if [ "${{ steps.encrypt.outcome }}" = "success" ] \
+             && [ "${{ steps.upload_audit.outcome }}" = "success" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload submission metadata (for record)
+        if: steps.encrypt.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: submission-metadata
+          path: /tmp/fetch-out/metadata.json
+          if-no-files-found: error
+          retention-days: 7
+
+      # ───────────────────────────────────────────────────────────────
+      # 4. Strip git state, then run the verifier (unchanged logic:
+      #    wrap → signature-shim Check.lean → lake build). The build
+      #    NEVER hard-fails the job (we capture its exit code) so the
+      #    audit `archive` job still runs for a non-compiling submission.
+      # ───────────────────────────────────────────────────────────────
+      - name: Strip git state before running untrusted Lean
+        if: steps.encrypt.outcome == 'success'
+        run: rm -rf .git lean-challenge/.git
+
       - name: Install elan
+        if: steps.encrypt.outcome == 'success'
         run: |
           set -e
           curl -fsSL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh \
@@ -340,33 +422,10 @@ TOML
           sh /tmp/elan-init.sh -y --default-toolchain none
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
 
-      # ───────────────────────────────────────────────────────────────
-      # 4. Wrap submission in a Submission namespace and generate the
-      #    signature-shim check file, then build the check (NOT the
-      #    user's file directly). This is the load-bearing step: if
-      #    the user's theorem signature does not match the canonical
-      #    one in Challenges/challenge_NN.lean (with `r` substituted
-      #    by Submission.r), `lake build Challenges.Check` fails to
-      #    typecheck.
-      #
-      #    Repo-mode submissions skip the wrap step — the user already
-      #    namespaces their own code and we copy `Submission/` directly
-      #    into the canonical checkout. Only gist mode needs the
-      #    auto-wrap.
-      # ───────────────────────────────────────────────────────────────
-      - name: Wrap submission into Challenges/Submission.lean
-        if: steps.parse.outputs.mode == 'gist'
+      - name: Wrap submission (gist mode)
+        if: steps.encrypt.outcome == 'success' && steps.parse.outputs.mode == 'gist'
         run: |
           MODULE="${{ steps.parse.outputs.module }}"
-          # The wrapper:
-          # 1. Imports the canonical so the user has access to its
-          #    helper structures (Minor, hadwigerNumber, etc.).
-          # 2. Hoists the user's own imports to file-top (Lean requires
-          #    all imports before any other content).
-          # 3. Puts everything else inside `namespace Submission` so
-          #    the user's `def r` and `theorem challenge_N` are at
-          #    `Submission.r` / `Submission.challenge_N`, distinct
-          #    from the canonical's defs at root.
           {
             echo "-- CI-generated wrapper for the submission."
             echo "import Challenges.${MODULE}"
@@ -378,14 +437,10 @@ TOML
             echo ""
             echo "end Submission"
           } > "lean-challenge/Challenges/Submission.lean"
-          echo "Wrote Submission.lean ($(wc -c < lean-challenge/Challenges/Submission.lean) bytes)"
 
       - name: Generate signature-shim Check.lean
+        if: steps.encrypt.outcome == 'success'
         run: |
-          # Gist flow: the wrap step above wrote `Challenges/Submission.lean`,
-          # so Check imports `Challenges.Submission`. Repo flow: the user's
-          # files were spliced into the new `Submission` lib at the project
-          # root, so Check imports `Submission.Main`.
           SUBMODULE="Challenges.Submission"
           if [ "${{ steps.parse.outputs.mode }}" = "repo" ]; then
             SUBMODULE="Submission.Main"
@@ -395,159 +450,225 @@ TOML
             --output "lean-challenge/Challenges/Check.lean" \
             --submission-module "$SUBMODULE"
 
-      - name: Fetch Mathlib cache
-        working-directory: lean-challenge
-        # `|| true` so a cache miss doesn't abort the run — lake build
-        # will still work, just slowly.
-        run: lake exe cache get || true
-
       - name: Build the signature shim
         id: build
+        if: steps.encrypt.outcome == 'success'
         working-directory: lean-challenge
-        # This builds Challenges.Check, which transitively builds
-        # Challenges.Submission. Failure here means EITHER the user's
-        # proof has a typo / wrong axiom / non-typechecking term, OR
-        # the theorem signature does not match the canonical one
-        # (the bypass we are guarding against).
+        # Exit code is captured into the `ok` output rather than failing
+        # the step, so the downstream `archive` job runs regardless and a
+        # non-compiling submission is still archived. `record` is gated on
+        # ok == 'true'.
         run: |
-          set -o pipefail
-          lake build Challenges.Check 2>&1 | tee /tmp/build.log
-
-      # ───────────────────────────────────────────────────────────────
-      # 5a. Success path: archive the proof, update leaderboard, comment,
-      #     close issue.
-      #
-      # The leaderboard only stores a `source_url` link back to the user's
-      # gist/repo, which can rot (deletion, force-push, unpinned ref). To
-      # preserve every winning proof we also commit the exact evaluated
-      # source into `solutions/<problem>_r<param>_issue<N>`:
-      #   - gist mode: the single pre-wrapper file the user submitted.
-      #   - repo mode: the whole `Submission/` directory CI built.
-      # A `git pull` of this repo then mirrors all solutions locally.
-      # ───────────────────────────────────────────────────────────────
-      - name: Archive accepted solution
-        if: success()
-        env:
-          MODE: ${{ steps.parse.outputs.mode }}
-          PROBLEM: ${{ steps.parse.outputs.problem_id }}
-          PARAM: ${{ steps.parse.outputs.parameter }}
-          ISSUE: ${{ github.event.issue.number }}
-        run: |
-          set -e
-          # Slugify the parameter so it is always a safe path component
-          # ("universal", "5", or anything the form accepted).
-          SAFE_PARAM=$(printf '%s' "$PARAM" | tr -c 'A-Za-z0-9._-' '_')
-          DEST="solutions/${PROBLEM}_r${SAFE_PARAM}_issue${ISSUE}"
-          mkdir -p solutions
-          if [ "$MODE" = "gist" ]; then
-            cp /tmp/submission.lean "${DEST}.lean"
-            echo "Archived gist submission to ${DEST}.lean"
+          set +e
+          lake exe cache get || true
+          lake build Challenges.Check
+          if [ $? -eq 0 ]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
           else
-            rm -rf "$DEST"
-            mkdir -p "$DEST"
-            cp -r lean-challenge/Submission "${DEST}/Submission"
-            echo "Archived repo submission to ${DEST}/Submission"
+            echo "ok=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Append to leaderboard
-        if: success()
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # In gist mode the source URL is the raw .lean URL. In repo mode
-          # we compose `<repo>/tree/<ref>` so the leaderboard link points
-          # at the user's submitted code at the exact ref CI evaluated.
-          if [ "${{ steps.parse.outputs.mode }}" = "repo" ]; then
-            SOURCE_URL="${{ steps.parse.outputs.repo_url }}/tree/${{ steps.parse.outputs.repo_ref }}"
-          else
-            SOURCE_URL="${{ steps.parse.outputs.source_url }}"
-          fi
-          python3 scripts/append_leaderboard.py \
-            --leaderboard site-data/leaderboard.json \
-            --nickname "${{ steps.parse.outputs.nickname }}" \
-            --name "${{ steps.parse.outputs.name }}" \
-            --problem "${{ steps.parse.outputs.problem_id }}" \
-            --claim "${{ steps.parse.outputs.claim }}" \
-            --parameter "${{ steps.parse.outputs.parameter }}" \
-            --issue "${{ github.event.issue.number }}" \
-            --source-url "$SOURCE_URL"
-
-          # Commit + push with a small retry loop so concurrent
-          # submission runs don't clobber each other.
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          for attempt in 1 2 3 4 5; do
-            git add site-data/leaderboard.json solutions/
-            git commit -m "leaderboard + solution: issue #${{ github.event.issue.number }}" || true
-            if git push; then
-              break
-            fi
-            echo "push attempt ${attempt} failed; pulling rebase and retrying"
-            git pull --rebase
-            python3 scripts/append_leaderboard.py \
-              --leaderboard site-data/leaderboard.json \
-              --nickname "${{ steps.parse.outputs.nickname }}" \
-              --name "${{ steps.parse.outputs.name }}" \
-              --problem "${{ steps.parse.outputs.problem_id }}" \
-              --claim "${{ steps.parse.outputs.claim }}" \
-              --parameter "${{ steps.parse.outputs.parameter }}" \
-              --issue "${{ github.event.issue.number }}" \
-              --source-url "$SOURCE_URL"
-          done
-
-      - name: Comment success on issue
-        if: success()
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh issue comment ${{ github.event.issue.number }} \
-            --repo "${{ github.repository }}" \
-            --body "✅ Build succeeded — added to the leaderboard.
-
-          - Problem: \`${{ steps.parse.outputs.problem_id }}\`
-          - Claim: ${{ steps.parse.outputs.claim }} for r = ${{ steps.parse.outputs.parameter }}
-          - Module built: \`Challenges.${{ steps.parse.outputs.module }}\`"
-          gh issue close ${{ github.event.issue.number }} \
-            --repo "${{ github.repository }}" \
-            --reason completed
-
       # ───────────────────────────────────────────────────────────────
-      # 5b. Failure path: comment with logs, close issue
+      # 5. In-job rejection comments. NOTE: we deliberately do NOT echo
+      #    the build log into the issue — on a public repo that would leak
+      #    submission source. The submitter gets a generic reason + a link
+      #    to the run; full logs are visible to maintainers.
       # ───────────────────────────────────────────────────────────────
-      - name: Comment failure on issue
+      - name: Comment on evaluate-stage rejection
+        # Fires for dup / fetch / size-cap / sorry / axiom / encryption
+        # failures (all set FETCH_ERROR and exit non-zero). Build failures
+        # are handled by the next step instead.
         if: failure()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Pick the most specific reason we have evidence for. The
-          # FETCH_ERROR env var is set by the fetch / clone step on
-          # sorry / axiom / URL failures. Otherwise we sniff the
-          # filesystem to see how far the run got before failing.
-          # The "did we fetch?" sentinel differs by mode: gist mode
-          # writes /tmp/submission.lean; repo mode populates
-          # lean-challenge/Submission/.
-          LOG_BLOCK=""
-          if [ -n "${FETCH_ERROR:-}" ]; then
-            REASON="$FETCH_ERROR"
-          elif [ ! -d lean-challenge ]; then
-            REASON="Could not check out the canonical challenges repository (\`utkuokur/lean-challenges@main\`). It may be private or temporarily unavailable. Please contact the maintainer."
-          elif [ "${{ steps.parse.outputs.mode }}" = "gist" ] && [ ! -f /tmp/submission.lean ]; then
-            REASON="Setup failed before the submission could be fetched. See workflow logs."
-          elif [ "${{ steps.parse.outputs.mode }}" = "repo" ] && [ ! -d lean-challenge/Submission ]; then
-            REASON="Setup failed before the submission repo could be cloned. See workflow logs."
-          elif [ -f /tmp/build.log ]; then
-            REASON="\`lake build\` of the signature shim failed. Most commonly: your theorem's type does not match the canonical \`challenge_N\` signature (substituting your \`Submission.r\` for \`r\`), OR your proof depends on a non-permitted axiom. The tail of the build log is below."
-            TAIL=$(tail -c 4000 /tmp/build.log)
-            LOG_BLOCK=$'\n\n<details><summary>Build log (tail)</summary>\n\n```\n'"$TAIL"$'\n```\n\n</details>'
-          else
-            REASON="The evaluation step failed before \`lake build\` started. See workflow logs."
-          fi
-          BODY="❌ Submission rejected: ${REASON}
-
-          See the workflow run for full logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}${LOG_BLOCK}"
+          REASON="${FETCH_ERROR:-The submission could not be processed. See the workflow logs.}"
           gh issue comment ${{ github.event.issue.number }} \
             --repo "${{ github.repository }}" \
-            --body "$BODY"
+            --body "❌ Submission rejected: ${REASON}
+
+          Workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           gh issue close ${{ github.event.issue.number }} \
+            --repo "${{ github.repository }}" --reason "not planned" || true
+
+      - name: Comment on build failure
+        if: steps.build.outputs.ok == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue comment ${{ github.event.issue.number }} \
             --repo "${{ github.repository }}" \
-            --reason "not planned" || true
+            --body "❌ Submission rejected: \`lake build\` of the signature shim failed. Most commonly your theorem's type does not match the canonical \`${{ steps.parse.outputs.problem_id }}\` signature (substituting your \`Submission.r\` for \`r\`), or the proof depends on a non-permitted axiom.
+
+          Full build logs (maintainer-visible): ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          gh issue close ${{ github.event.issue.number }} \
+            --repo "${{ github.repository }}" --reason "not planned" || true
+
+  # ─────────────────────────────────────────────────────────────────────
+  # archive: push the age-encrypted source + sidecar to the PRIVATE audit
+  # repo via the lean-challenge-archiver App. Fresh runner — the
+  # write-capable token must never be co-resident with untrusted Lean.
+  # Runs whenever the source was fetched, within cap, and encrypted —
+  # even if the build later failed (we still archive what we evaluated).
+  # ─────────────────────────────────────────────────────────────────────
+  archive:
+    needs: evaluate
+    if: |
+      always()
+      && needs.evaluate.outputs.fetch_succeeded == 'true'
+      && needs.evaluate.outputs.size_within_cap == 'true'
+      && needs.evaluate.outputs.audit_ciphertext_ready == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: submission-audit-ciphertext
+          path: /tmp/audit-in
+
+      - name: Mint lean-challenge-archiver installation token
+        id: archiver_token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.LEAN_CHALLENGE_ARCHIVER_APP_ID }}
+          private-key: ${{ secrets.LEAN_CHALLENGE_ARCHIVER_PRIVATE_KEY }}
+          owner: utkuokur
+          repositories: lean-challenges-audit
+
+      - name: Push to lean-challenges-audit
+        env:
+          # Step-scoped, mirroring the bot-token pattern in `evaluate`.
+          ARCHIVER_TOKEN: ${{ steps.archiver_token.outputs.token }}
+        run: |
+          set -euo pipefail
+          if [ "${{ needs.evaluate.outputs.build_succeeded }}" = "true" ]; then
+            VERDICT=pass
+          else
+            VERDICT=fail
+          fi
+          python3 scripts/archive_submission.py push \
+            --ciphertext /tmp/audit-in/source.tar.gz.age \
+            --sidecar /tmp/audit-in/sidecar.partial.json \
+            --verdict "$VERDICT" \
+            --workflow-run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+  # ─────────────────────────────────────────────────────────────────────
+  # record: append to the public leaderboard. Gated on `archive` so a
+  # leaderboard entry always implies a durable encrypted archive of the
+  # source. Only runs when the build passed.
+  # ─────────────────────────────────────────────────────────────────────
+  record:
+    needs: [evaluate, archive]
+    if: |
+      always()
+      && needs.evaluate.outputs.build_succeeded == 'true'
+      && needs.archive.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        # Default token; this repo has no branch protection, so the
+        # GITHUB_TOKEN push to main is sufficient (no recorder App needed).
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: submission-metadata
+          path: /tmp/meta
+
+      - name: Append to leaderboard and push
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          M=/tmp/meta/metadata.json
+          NICK=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['nickname'])" "$M")
+          NAME=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['name'])" "$M")
+          PROBLEM=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['problem_id'])" "$M")
+          CLAIM=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['claim'])" "$M")
+          PARAM=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['parameter'])" "$M")
+          PUBLIC=$(python3 -c "import json,sys;print(str(json.load(open(sys.argv[1]))['submission_public']).lower())" "$M")
+          SRC=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1])).get('source_url') or '')" "$M")
+
+          # Only publish the source link for PUBLIC submissions; private
+          # ones land on the leaderboard with no recoverable source link.
+          if [ "$PUBLIC" = "true" ]; then
+            PUBLIC_FLAG="--submission-public"; SRC_ARG=(--source-url "$SRC")
+          else
+            PUBLIC_FLAG="--no-submission-public"; SRC_ARG=()
+          fi
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          for attempt in 1 2 3 4 5; do
+            git fetch origin main && git reset --hard origin/main
+            python3 scripts/append_leaderboard.py \
+              --leaderboard site-data/leaderboard.json \
+              --nickname "$NICK" --name "$NAME" \
+              --problem "$PROBLEM" --claim "$CLAIM" --parameter "$PARAM" \
+              --issue "${{ github.event.issue.number }}" \
+              $PUBLIC_FLAG "${SRC_ARG[@]}"
+            git add site-data/leaderboard.json
+            git commit -m "leaderboard: issue #${{ github.event.issue.number }}" || true
+            if git push origin HEAD:main; then
+              break
+            fi
+            echo "push attempt ${attempt} failed; retrying"
+            sleep $((attempt * 2))
+          done
+
+      - name: Comment success and close
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          M=/tmp/meta/metadata.json
+          PROBLEM=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['problem_id'])" "$M")
+          MODULE=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['module'])" "$M")
+          gh issue comment ${{ github.event.issue.number }} \
+            --repo "${{ github.repository }}" \
+            --body "✅ Build succeeded — added to the leaderboard.
+
+          - Problem: \`${PROBLEM}\`
+          - Module built: \`Challenges.${MODULE}\`
+          - An encrypted copy of your submission was archived for audit; your source was not published."
+          gh issue close ${{ github.event.issue.number }} \
+            --repo "${{ github.repository }}" --reason completed
+
+  # ─────────────────────────────────────────────────────────────────────
+  # notify: surface INFRASTRUCTURE failures only — the build passed but
+  # archive or record did not complete. Build failures and all evaluate-
+  # stage rejections are already commented inside the evaluate job, so
+  # this never double-comments them.
+  # ─────────────────────────────────────────────────────────────────────
+  notify:
+    needs: [evaluate, archive, record]
+    if: |
+      always()
+      && needs.evaluate.outputs.build_succeeded == 'true'
+      && (needs.archive.result != 'success' || needs.record.result != 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Comment on infrastructure failure
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ARCHIVE_RESULT: ${{ needs.archive.result }}
+          RECORD_RESULT: ${{ needs.record.result }}
+        run: |
+          if [ "$ARCHIVE_RESULT" != "success" ]; then
+            BODY="⚠️ Your proof compiled, but the audit-archive step did not complete (archive job: $ARCHIVE_RESULT), so the leaderboard was not updated. A maintainer will investigate. Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          else
+            BODY="⚠️ Your proof compiled and was archived, but recording it to the leaderboard did not complete (record job: $RECORD_RESULT). A maintainer will investigate. Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          fi
+          gh issue comment ${{ github.event.issue.number }} \
+            --repo "${{ github.repository }}" --body "$BODY"
