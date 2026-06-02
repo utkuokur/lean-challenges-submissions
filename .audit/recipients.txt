@@ -16,24 +16,8 @@
 # new. Old ciphertexts remain decryptable by their original recipients
 # only; re-encrypting historical entries is a manual operation, not done
 # automatically.
-#
-# ---------------------------------------------------------------------------
-# SETUP REQUIRED. There are no active recipients yet, so the audit-archive
-# step (and therefore the whole submission pipeline, which is gated on it)
-# will FAIL until at least one real recipient is added below.
-#
-# To add yourself as a recipient, EITHER:
-#
-#   (a) reuse an SSH public key you already control, e.g. paste the
-#       contents of ~/.ssh/id_ed25519.pub on its own line below; OR
-#   (b) generate a dedicated age key:
-#           age-keygen -o ~/.config/lean-challenges-audit.key
-#       then paste the `# public key: age1...` line it prints below
-#       (the PUBLIC key only — keep the file with the private key safe).
-#
-# Then delete this SETUP block. See docs/audit-archive.md for the full
-# design and the decryption procedure.
-# ---------------------------------------------------------------------------
 
-# Example (REPLACE with your real key, then remove the leading '# '):
-# ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI................................. you@example.com
+# utkuokur — audit decryption key (age X25519), generated 2026-06-02.
+# Private half kept off-repo by the maintainer; losing it makes archived
+# submissions permanently undecryptable.
+age1hfq6ademtxmzfkg0ktjvuxatmj63g7tl65ugy43cfccwt8pp3a5s87snzx
