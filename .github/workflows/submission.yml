@@ -404,10 +404,15 @@ jobs:
           retention-days: 7
 
       # ───────────────────────────────────────────────────────────────
-      # 4. Strip git state, then run the verifier (unchanged logic:
-      #    wrap → signature-shim Check.lean → lake build). The build
-      #    NEVER hard-fails the job (we capture its exit code) so the
-      #    audit `archive` job still runs for a non-compiling submission.
+      # 4. Strip git state, then run the verifier: wrap → signature-shim
+      #    Check.lean → build. The build is SPLIT for the sandbox:
+      #      (a) pre-build the trusted env (Mathlib cache + canonical
+      #          module) WITH network;
+      #      (b) compile the untrusted submission under bubblewrap with
+      #          NO network.
+      #    The build NEVER hard-fails the job (we capture its exit code)
+      #    so the audit `archive` job still runs for a non-compiling
+      #    submission.
       # ───────────────────────────────────────────────────────────────
       - name: Strip git state before running untrusted Lean
         if: steps.encrypt.outcome == 'success'
@@ -450,19 +455,60 @@ jobs:
             --output "lean-challenge/Challenges/Check.lean" \
             --submission-module "$SUBMODULE"
 
-      - name: Build the signature shim
-        id: build
+      - name: Pre-build trusted environment (with network)
         if: steps.encrypt.outcome == 'success'
         working-directory: lean-challenge
-        # Exit code is captured into the `ok` output rather than failing
-        # the step, so the downstream `archive` job runs regardless and a
-        # non-compiling submission is still archived. `record` is gated on
-        # ok == 'true'.
+        # Fetch the Mathlib cache and compile the canonical module the
+        # submission imports — all TRUSTED code — WITH network. After this,
+        # the untrusted compile below has every dependency locally and needs
+        # no network, so it can run network-isolated. No untrusted submitter
+        # code is elaborated here (the canonical module does not import
+        # `Submission`).
         run: |
           set +e
           lake exe cache get || true
-          lake build Challenges.Check
-          if [ $? -eq 0 ]; then
+          lake build Challenges.${{ steps.parse.outputs.module }} || true
+
+      - name: Install bubblewrap (build sandbox)
+        if: steps.encrypt.outcome == 'success'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq bubblewrap
+
+      - name: Build the signature shim (network-isolated sandbox)
+        id: build
+        if: steps.encrypt.outcome == 'success'
+        working-directory: lean-challenge
+        # This is the ONLY step that elaborates untrusted submitter Lean
+        # (Lean can run arbitrary code during elaboration). We run it under
+        # bubblewrap with `--unshare-net`, so the build has NO network —
+        # blocking crypto-mining, data exfiltration, and using the runner to
+        # attack third parties. `--dev-bind / /` leaves the rest of the
+        # filesystem as-is (lowest chance of breaking the build); secrets
+        # were already removed (.git stripped, tokens step-scoped), and the
+        # deps + canonical module were compiled above, so the offline
+        # compile needs no network.
+        #
+        # If bubblewrap can't initialize a namespace on the runner, we fall
+        # back to a non-isolated build with a warning rather than failing
+        # every submission. The build's own exit code goes into `ok` (the
+        # step never hard-fails) so the audit `archive` job still runs for a
+        # non-compiling submission; `record` is gated on ok == 'true'.
+        #
+        # NOTE: untested from the author's machine (no Lean/Linux locally) —
+        # confirm on a real CI run that bubblewrap is available and the
+        # offline compile succeeds before relying on it. See SECURITY.md.
+        run: |
+          set +e
+          if bwrap --unshare-net --dev-bind / / true 2>/dev/null; then
+            echo "sandbox: bubblewrap network isolation engaged"
+            bwrap --unshare-net --dev-bind / / --die-with-parent --chdir "$PWD" \
+              bash -c 'lake build Challenges.Check'
+            rc=$?
+          else
+            echo "::warning::bubblewrap could not initialize a sandbox on this runner; building WITHOUT network isolation"
+            lake build Challenges.Check
+            rc=$?
+          fi
+          if [ "$rc" -eq 0 ]; then
             echo "ok=true" >> "$GITHUB_OUTPUT"
           else
             echo "ok=false" >> "$GITHUB_OUTPUT"

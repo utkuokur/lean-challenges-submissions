@@ -48,25 +48,42 @@ on, and — importantly — where they are **weaker** than the upstream
    `lean-challenges-audit` repo. `record` is gated on `archive`, so a
    leaderboard entry always implies a durable encrypted copy. See
    `docs/audit-archive.md`.
+6. **Network-isolated build.** The untrusted submission is compiled under
+   `bubblewrap --unshare-net`, so the build has no network access. Deps
+   (Mathlib cache + the canonical module) are fetched/compiled in a
+   separate, earlier step that runs only trusted code with network; the
+   untrusted compile then runs offline. This blocks crypto-mining, data
+   exfiltration, and using the runner to attack third parties, and stops a
+   malicious submission from phoning home with anything it reads on the
+   runner. See §3 for what this does and does not cover.
 
 ## 3. Residual exposure — read this before relying on confidentiality
 
-**Confidentiality is best-effort, not a guarantee**, and is weaker here
-than upstream for two structural reasons:
+**Confidentiality is best-effort, not a guarantee.** Two things to know:
 
-- **No sandbox around untrusted Lean.** `leanprover/lean-eval` elaborates
-  untrusted submissions inside the `comparator`/`landrun` sandbox. This
-  pipeline runs `lake build` on the submission **directly on the
-  runner**. Lean elaboration can execute arbitrary code (custom
-  elaborators, `run_cmd`, `#eval`, build scripts), so a malicious
-  submission can run arbitrary code on the runner during the build. The
-  `.git`-strip + `persist-credentials:false` + step-scoped bot token
-  reduce what such code can steal (no long-lived credentials are present
-  during the build), but a determined attacker who can run code on the
-  runner can still read other submissions in flight on that runner, or
-  probe the runner environment. Adding a sandbox (as upstream does) is
-  the recommended hardening and is **out of scope** for this privacy
-  port; treat the current build step as running untrusted code.
+- **Network-isolated, but not a full sandbox.** Lean elaboration can
+  execute arbitrary code (custom elaborators, `run_cmd`, `#eval`, build
+  scripts), so the build step runs untrusted code. We compile it under
+  `bubblewrap --unshare-net`, which removes **network access** — the
+  highest-value containment (no mining, no exfiltration, no outbound
+  attacks, nothing it reads can be phoned home). This is lighter than
+  `leanprover/lean-eval`'s `comparator`/`landrun` sandbox: we do **not**
+  lock down the filesystem (`--dev-bind / /` leaves it intact, to minimise
+  the chance of breaking the build), so untrusted code can still read
+  what's on the runner and use CPU within the job's `timeout-minutes`. It
+  cannot, however, send any of that anywhere. The `.git`-strip +
+  `persist-credentials:false` + step-scoped bot token mean no long-lived
+  credentials are present during the build. Each submission runs on its
+  own fresh runner, so cross-submission reads are limited to whatever is
+  co-resident in a single run. Tightening to a filesystem sandbox (bind
+  only the build dir read-write, rest read-only) is the next hardening
+  step if needed.
+- **Unverified locally.** The sandbox was added without a local
+  Lean/Linux environment to test it. The workflow falls back to a
+  non-isolated build (with a `::warning::`) if bubblewrap cannot
+  initialise a namespace on the runner, so it will not hard-fail every
+  submission — but confirm on a real CI run that bubblewrap engages and
+  that legitimate submissions still compile offline before relying on it.
 - **Public Actions logs.** While this submissions repo is **public**, its
   Actions logs are public. The pipeline no longer prints the build log
   into issue comments, but `lake build` diagnostics in the run logs can
@@ -87,8 +104,10 @@ Python into the workflow. Constrained fields (`problem_id`, `parameter`,
 
 ## 5. Soft spots — where to look first
 
-1. **The build step runs untrusted Lean unsandboxed** (§3). Highest-value
-   hardening target.
+1. **The build step runs untrusted Lean** (§3). It is network-isolated
+   (`bubblewrap --unshare-net`) but not filesystem-sandboxed. Tightening
+   the filesystem and confirming the sandbox engages on CI is the
+   highest-value remaining hardening.
 2. **`.audit/recipients.txt` custody.** Adding a recipient grants
    permanent read access to the entire archive; treat additions as
    reviewed PRs. Losing every private key makes the archive
