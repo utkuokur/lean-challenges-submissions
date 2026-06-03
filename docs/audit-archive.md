@@ -74,7 +74,7 @@ submission leaking out of the maintainer set.**
 - **Public-repo artifacts are downloadable by any authenticated user** —
   which is why the plaintext source is *never* uploaded as an artifact
   (only the ciphertext is, and that is useless without a recipient
-  private key), and why fetch + build share one job (see `SECURITY.md`).
+  private key), and why fetch + build share one job (see `security-model.md`).
 - **Runners that elaborate untrusted Lean can be compromised.** The
   archiver App's write token is minted only in the `archive` job, on a
   separate runner that never touched the submitted source.

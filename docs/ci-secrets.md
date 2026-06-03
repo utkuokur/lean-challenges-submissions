@@ -69,7 +69,7 @@ encrypted archive.
      gh secret set LEAN_CHALLENGE_ARCHIVER_PRIVATE_KEY -R utkuokur/lean-challenges-submissions < path/to/archiver-key.pem
      ```
 
-5. **(Recommended) Decide on repo visibility.** See `SECURITY.md` §
+5. **(Recommended) Decide on repo visibility.** See `security-model.md` §
    "Residual exposure". Source confidentiality is *best-effort* while
    this submissions repo is public, because the Actions logs are public.
    The pipeline no longer publishes source deliberately, but build

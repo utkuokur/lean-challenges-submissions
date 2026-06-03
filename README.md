@@ -68,7 +68,7 @@ What is and isn't visible:
   age-encrypted copy is retained in a private audit repo, decryptable
   only by the maintainers listed in
   [`.audit/recipients.txt`](.audit/recipients.txt). This is the cost of
-  server-side verification — see [`SECURITY.md`](SECURITY.md), which also
+  server-side verification — see [`docs/security-model.md`](docs/security-model.md), which also
   documents the limits of this confidentiality (it is best-effort).
 
 Once any submission has settled a given (problem, r) pair, later
@@ -96,13 +96,13 @@ the proof was produced.
 docs/
   audit-archive.md         # encrypted-archive design + decryption
   ci-secrets.md            # GitHub Apps, audit repo, one-time setup
+  security-model.md        # confidentiality / threat model
 scripts/
   append_leaderboard.py    # appends one entry to site-data/leaderboard.json
   archive_submission.py    # age-encrypts source + pushes to the private audit repo
   generate_check.py        # per-problem signature + axiom shim
 site-data/
   leaderboard.json         # public leaderboard; consumed by the React UI
-SECURITY.md                # confidentiality / threat model
 ```
 
 Accepted proofs are **no longer** committed in plaintext here. Instead an

@@ -15,7 +15,7 @@ Two subcommands, run from different workflow jobs:
            plaintext source tarball, encrypts it with `age` to every
            recipient in `.audit/recipients.txt`, writes the ciphertext
            and a partial sidecar JSON. Failing here fails the
-           submission (see SECURITY.md).
+           submission (see docs/security-model.md).
 
   push     Runs in the `archive` job on a fresh runner. Takes the
            ciphertext and partial sidecar from `encrypt`, merges in the

@@ -12,7 +12,7 @@ name: Evaluate submission
 # The submission source is never published. Other contestants cannot see
 # it; the submitter (it's their repo) and the maintainers (who hold the
 # audit-archive private keys, and who can read the private audit repo)
-# can. The load-bearing invariants — read SECURITY.md before editing:
+# can. The load-bearing invariants — read docs/security-model.md before editing:
 #   * fetch + build live in ONE job, so the source never crosses a
 #     runner boundary as a downloadable artifact (public-repo artifacts
 #     are downloadable by anyone authenticated). Do NOT upload the
@@ -495,7 +495,7 @@ jobs:
         #
         # NOTE: untested from the author's machine (no Lean/Linux locally) —
         # confirm on a real CI run that bubblewrap is available and the
-        # offline compile succeeds before relying on it. See SECURITY.md.
+        # offline compile succeeds before relying on it. See docs/security-model.md.
         run: |
           set +e
           if bwrap --unshare-net --dev-bind / / true 2>/dev/null; then
