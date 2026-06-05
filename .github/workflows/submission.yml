@@ -98,21 +98,13 @@ jobs:
           def normalize(v: str) -> str:
               return "" if v in ("", "_No response_") else v
 
-          source_url = normalize(extract("Submission URL", required=False))
           repo_url = normalize(extract("Repository URL", required=False))
-          if source_url and repo_url:
-              sys.exit("Fill exactly one of `Submission URL` or "
-                       "`Repository URL`, not both.")
-          if not source_url and not repo_url:
-              sys.exit("Fill in either `Submission URL` (single .lean) "
-                       "or `Repository URL` (multi-file repo).")
-          if source_url:
-              mode = "gist"
-              repo_ref = ""
-          else:
-              mode = "repo"
-              repo_ref = normalize(
-                  extract("Git ref", required=False)) or "main"
+          if not repo_url:
+              sys.exit("Fill in `Repository URL` — the HTTPS URL of your "
+                       "GitHub repo (public, or private with the "
+                       "`lean-challenge-bot` App installed).")
+          mode = "repo"
+          repo_ref = "main"
 
           parameter_raw = normalize(
               extract("Chosen parameter r", required=False))
@@ -143,7 +135,6 @@ jobs:
           module = f"challenge_{n:02d}{suffix}"
 
           single = {"mode": mode, "scope": scope,
-                    "source_url": source_url,
                     "repo_url": repo_url, "repo_ref": repo_ref,
                     "problem_id": problem_id,
                     "module": module, "claim": claim,
@@ -218,8 +209,7 @@ jobs:
 
       # ───────────────────────────────────────────────────────────────
       # 2. Fetch submission. Produces:
-      #    /tmp/submission.lean              (gist mode, pre-wrapper file)
-      #    lean-challenge/Submission/        (repo mode, spliced lib)
+      #    lean-challenge/Submission/        (spliced submission lib)
       #    /tmp/fetch-out/source.tar.gz      (the exact evaluated bytes)
       #    /tmp/fetch-out/metadata.json      (record + audit metadata)
       #
@@ -229,8 +219,6 @@ jobs:
         id: fetch
         env:
           APP_INSTALLATION_TOKEN: ${{ steps.app_token.outputs.token }}
-          MODE: ${{ steps.parse.outputs.mode }}
-          SOURCE_URL: ${{ steps.parse.outputs.source_url }}
           REPO_URL: ${{ steps.parse.outputs.repo_url }}
           REPO_REF: ${{ steps.parse.outputs.repo_ref }}
           OWNER_REPO: ${{ steps.owner.outputs.owner_repo }}
@@ -247,66 +235,48 @@ jobs:
           set -e
           mkdir -p /tmp/fetch-out
 
-          if [ "$MODE" = "gist" ]; then
-            # ---- single PUBLIC .lean file ----
-            if ! curl -fsSL --max-time 30 --max-filesize 1048576 \
-                -H "Accept: text/plain" "$SOURCE_URL" -o /tmp/submission.lean; then
-              echo "FETCH_ERROR=Could not fetch the submission URL." >> "$GITHUB_ENV"
-              exit 1
-            fi
-            if ! MSG=$(python3 scripts/content_checks.py /tmp/submission.lean); then
-              echo "FETCH_ERROR=${MSG#ERROR: }" >> "$GITHUB_ENV"
-              exit 1
-            fi
-            export SUBMISSION_PUBLIC=true SUBMISSION_KIND=gist SUBMISSION_REPO=gist SUBMISSION_REF=
-            # source tarball = the single pre-wrapper file
-            tar -czf /tmp/fetch-out/source.tar.gz -C /tmp submission.lean
-            echo "Fetched $(wc -c < /tmp/submission.lean) bytes."
-
+          # ---- multi-file repo (may be PRIVATE) ----
+          # Is the repo publicly cloneable? (anonymous ls-remote)
+          if git ls-remote "$REPO_URL" >/dev/null 2>&1; then
+            export SUBMISSION_PUBLIC=true
           else
-            # ---- multi-file repo (may be PRIVATE) ----
-            # Is the repo publicly cloneable? (anonymous ls-remote)
-            if git ls-remote "$REPO_URL" >/dev/null 2>&1; then
-              export SUBMISSION_PUBLIC=true
-            else
-              export SUBMISSION_PUBLIC=false
-            fi
-            # Prefer the App token (works for public AND private). Embed it
-            # in the clone URL; we strip .git afterwards so it never reaches
-            # the Lean elaboration.
-            if [ -n "${APP_INSTALLATION_TOKEN:-}" ]; then
-              CLONE_URL="https://x-access-token:${APP_INSTALLATION_TOKEN}@github.com/${OWNER_REPO}.git"
-            else
-              CLONE_URL="$REPO_URL"
-            fi
-            if ! git clone --depth 1 --branch "$REPO_REF" "$CLONE_URL" /tmp/user-repo 2>/dev/null; then
-              if [ "$SUBMISSION_PUBLIC" != "true" ]; then
-                echo "FETCH_ERROR=Could not clone the (private) repo \`$REPO_URL\` at ref \`$REPO_REF\`. Install the \`lean-challenge-bot\` GitHub App on it (link in the README) so CI can read it, then re-open this issue." >> "$GITHUB_ENV"
-              else
-                echo "FETCH_ERROR=Could not clone \`$REPO_URL\` at ref \`$REPO_REF\`. Check the URL and that the ref exists." >> "$GITHUB_ENV"
-              fi
-              exit 1
-            fi
-            export SUBMISSION_REF=$(git -C /tmp/user-repo rev-parse HEAD)
-            if [ ! -f /tmp/user-repo/Submission/Main.lean ]; then
-              echo "FETCH_ERROR=Repository must contain \`Submission/Main.lean\` at the root. See the repo submission template for the expected layout." >> "$GITHUB_ENV"
-              exit 1
-            fi
-            if ! MSG=$(python3 scripts/content_checks.py /tmp/user-repo/Submission); then
-              echo "FETCH_ERROR=${MSG#ERROR: }" >> "$GITHUB_ENV"
-              exit 1
-            fi
-            # Splice the user's Submission/ into the canonical checkout as a
-            # sibling Lake lib of `Challenges`.
-            cp -r /tmp/user-repo/Submission lean-challenge/Submission
-            printf '\n[[lean_lib]]\nname = "Submission"\n' >> lean-challenge/lakefile.toml
-            # source tarball = the evaluated Submission/ tree
-            tar -czf /tmp/fetch-out/source.tar.gz -C lean-challenge Submission
-            # Strip the token-bearing clone before any untrusted Lean runs.
-            rm -rf /tmp/user-repo/.git
-            export SUBMISSION_KIND=github_repo SUBMISSION_REPO="$OWNER_REPO"
-            echo "Spliced $(find lean-challenge/Submission -name '*.lean' | wc -l) Lean file(s) from $REPO_URL@$SUBMISSION_REF (public=$SUBMISSION_PUBLIC)."
+            export SUBMISSION_PUBLIC=false
           fi
+          # Prefer the App token (works for public AND private). Embed it
+          # in the clone URL; we strip .git afterwards so it never reaches
+          # the Lean elaboration.
+          if [ -n "${APP_INSTALLATION_TOKEN:-}" ]; then
+            CLONE_URL="https://x-access-token:${APP_INSTALLATION_TOKEN}@github.com/${OWNER_REPO}.git"
+          else
+            CLONE_URL="$REPO_URL"
+          fi
+          if ! git clone --depth 1 --branch "$REPO_REF" "$CLONE_URL" /tmp/user-repo 2>/dev/null; then
+            if [ "$SUBMISSION_PUBLIC" != "true" ]; then
+              echo "FETCH_ERROR=Could not clone the (private) repo \`$REPO_URL\`. Install the \`lean-challenge-bot\` GitHub App on it (link in the README) so CI can read it, then re-open this issue." >> "$GITHUB_ENV"
+            else
+              echo "FETCH_ERROR=Could not clone \`$REPO_URL\`. Check the URL and that it has a \`main\` branch." >> "$GITHUB_ENV"
+            fi
+            exit 1
+          fi
+          export SUBMISSION_REF=$(git -C /tmp/user-repo rev-parse HEAD)
+          if [ ! -f /tmp/user-repo/Submission/Main.lean ]; then
+            echo "FETCH_ERROR=Repository must contain \`Submission/Main.lean\` at the root, with your \`r\` and \`theorem challenge_N\` inside \`namespace Submission\`. See the submission guide on the website for the expected layout." >> "$GITHUB_ENV"
+            exit 1
+          fi
+          if ! MSG=$(python3 scripts/content_checks.py /tmp/user-repo/Submission); then
+            echo "FETCH_ERROR=${MSG#ERROR: }" >> "$GITHUB_ENV"
+            exit 1
+          fi
+          # Splice the user's Submission/ into the canonical checkout as a
+          # sibling Lake lib of `Challenges`.
+          cp -r /tmp/user-repo/Submission lean-challenge/Submission
+          printf '\n[[lean_lib]]\nname = "Submission"\n' >> lean-challenge/lakefile.toml
+          # source tarball = the evaluated Submission/ tree
+          tar -czf /tmp/fetch-out/source.tar.gz -C lean-challenge Submission
+          # Strip the token-bearing clone before any untrusted Lean runs.
+          rm -rf /tmp/user-repo/.git
+          export SUBMISSION_KIND=github_repo SUBMISSION_REPO="$OWNER_REPO"
+          echo "Spliced $(find lean-challenge/Submission -name '*.lean' | wc -l) Lean file(s) from $REPO_URL@$SUBMISSION_REF (public=$SUBMISSION_PUBLIC)."
 
           # Frozen metadata for the audit sidecar (encrypt) and the
           # leaderboard (record job). Written by a committed helper that
@@ -427,33 +397,13 @@ jobs:
           sh /tmp/elan-init.sh -y --default-toolchain none
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
 
-      - name: Wrap submission (gist mode)
-        if: steps.encrypt.outcome == 'success' && steps.parse.outputs.mode == 'gist'
-        run: |
-          MODULE="${{ steps.parse.outputs.module }}"
-          {
-            echo "-- CI-generated wrapper for the submission."
-            echo "import Challenges.${MODULE}"
-            grep -E '^[[:space:]]*import[[:space:]]+' /tmp/submission.lean || true
-            echo ""
-            echo "namespace Submission"
-            echo ""
-            grep -v -E '^[[:space:]]*import[[:space:]]+' /tmp/submission.lean
-            echo ""
-            echo "end Submission"
-          } > "lean-challenge/Challenges/Submission.lean"
-
       - name: Generate signature-shim Check.lean
         if: steps.encrypt.outcome == 'success'
         run: |
-          SUBMODULE="Challenges.Submission"
-          if [ "${{ steps.parse.outputs.mode }}" = "repo" ]; then
-            SUBMODULE="Submission.Main"
-          fi
           python3 scripts/generate_check.py \
             --problem "${{ steps.parse.outputs.problem_id }}" \
             --output "lean-challenge/Challenges/Check.lean" \
-            --submission-module "$SUBMODULE"
+            --submission-module "Submission.Main"
 
       - name: Pre-build trusted environment (with network)
         if: steps.encrypt.outcome == 'success'

@@ -17,28 +17,24 @@ you're settling:
   counterexample. You pick the problem and whether you're proving or
   disproving.
 
-Each form lets you submit one of two ways. Fill in **exactly one** of:
+Either way, you submit a **GitHub repository URL** (a single field on
+the form). Your repo — public, or **private** with the
+`lean-challenge-bot` App installed (see "Keeping your proof private"
+below) — must contain:
 
-- **Submission URL** — single `.lean` file at a public raw URL (a gist
-  or a `raw.githubusercontent.com/...` link). CI strips comments,
-  rejects bare `sorry` / `axiom` declarations, wraps the file in
-  `namespace Submission`, and builds.
-- **Repository URL** — multi-file submission hosted in a GitHub repo
-  (public, or **private** with the `lean-challenge-bot` App installed —
-  see "Keeping your proof private" below). Your repo must contain:
+```
+Submission/
+  Main.lean        # defines `r` and `theorem challenge_N` inside `namespace Submission`
+  <Helper>.lean    # optional; imported as `import Submission.<Helper>`
+```
 
-  ```
-  Submission/
-    Main.lean        # defines `r` and `theorem challenge_N` inside `namespace Submission`
-    <Helper>.lean    # optional; imported as `import Submission.<Helper>`
-  ```
+A single-file proof is just a repo with everything in `Main.lean`. CI
+shallow-clones the `main` branch, runs the content checks (strips
+comments, rejects bare `sorry` / `axiom` declarations) over every file
+under `Submission/`, splices the directory into the canonical checkout
+as a sibling Lake lib of `Challenges`, and builds.
 
-  CI shallow-clones the repo at the given ref, runs the same content
-  checks over every file under `Submission/`, splices the directory
-  into the canonical checkout as a sibling Lake lib of `Challenges`,
-  and builds.
-
-Both paths generate a per-problem `Challenges/Check.lean` that
+The build generates a per-problem `Challenges/Check.lean` that
 (1) pins `Submission.challenge_N` to the canonical signature
 (substituting `Submission.r` for `r`), and (2) asserts via
 `Lean.collectAxioms` that the proof only depends on Lean's three
@@ -53,8 +49,7 @@ issue). On success, an entry is appended to `site-data/leaderboard.json`
 You can keep your proof source hidden from other contestants while still
 appearing on the leaderboard:
 
-1. Host your proof in a **private** GitHub repo (use the *Repository URL*
-   field, not a single-file URL — single files must be public).
+1. Host your proof in a **private** GitHub repo.
 2. Install the **`lean-challenge-bot`** GitHub App on that repo so the CI
    can clone it: **<https://github.com/apps/lean-challenge-bot>**.
 
@@ -123,7 +118,7 @@ age-encrypted copy of every evaluated submission is pushed to the private
       "parameter": "5",          // or "universal" for ∀r challenges
       "date": "2026-05-30T12:34:56Z",
       "issue": 42,
-      "source_url": "https://raw.githubusercontent.com/.../challenge_01.lean",
+      "source_url": "https://github.com/me/my-proofs/tree/main",
       "submission_public": true   // false for private submissions; source_url is then ""
     }
   ]

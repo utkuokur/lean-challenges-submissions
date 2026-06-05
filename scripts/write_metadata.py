@@ -4,10 +4,10 @@
 Usage:
     write_metadata.py <output-path>
 
-Reads ISSUE, PROBLEM_ID, PARAMETER, CLAIM, NICKNAME, NAME, MODULE, MODE,
-SOURCE_URL, REPO_URL, REPO_REF, SUBMISSION_KIND, SUBMISSION_REPO,
-SUBMISSION_REF, SUBMISSION_PUBLIC from the environment and serializes them
-to JSON. Reading from the environment (rather than `${{ }}` interpolation
+Reads ISSUE, PROBLEM_ID, PARAMETER, CLAIM, NICKNAME, NAME, MODULE,
+REPO_URL, REPO_REF, SUBMISSION_KIND, SUBMISSION_REPO, SUBMISSION_REF,
+SUBMISSION_PUBLIC from the environment and serializes them to JSON.
+Reading from the environment (rather than `${{ }}` interpolation
 into the workflow script) and serializing with json.dumps keeps
 user-controlled fields escaped, not injected.
 
@@ -28,11 +28,7 @@ def main(argv):
         return 2
     out_path = argv[0]
 
-    mode = os.environ["MODE"]
-    if mode == "repo":
-        src = os.environ["REPO_URL"] + "/tree/" + os.environ["REPO_REF"]
-    else:
-        src = os.environ["SOURCE_URL"]
+    src = os.environ["REPO_URL"] + "/tree/" + os.environ["REPO_REF"]
 
     data = {
         "issue": int(os.environ["ISSUE"]),

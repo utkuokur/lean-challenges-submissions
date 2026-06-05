@@ -51,14 +51,13 @@ SIDECAR_SCHEMA_VERSION = 1
 DEFAULT_AUDIT_REPO = "utkuokur/lean-challenges-audit"
 PUSH_RETRY_ATTEMPTS = 5
 
-# `submission_ref`, when present, is a full 40-char lowercase hex SHA
-# resolved from the cloned repo. Gist / raw-URL submissions have no SHA,
-# so an empty ref is allowed.
+# `submission_ref` is a full 40-char lowercase hex SHA resolved from the
+# cloned repo. An empty ref is still tolerated defensively.
 SHA40_RE = re.compile(r"^[0-9a-f]{40}$")
 SHA256_HEX_RE = re.compile(r"^[0-9a-f]{64}$")
 # A path-safe slug for the audit-object filename components.
 SLUG_RE = re.compile(r"^[A-Za-z0-9._-]+$")
-ALLOWED_SUBMISSION_KINDS = ("github_repo", "gist")
+ALLOWED_SUBMISSION_KINDS = ("github_repo",)
 ALLOWED_VERDICTS = ("pass", "fail")
 
 

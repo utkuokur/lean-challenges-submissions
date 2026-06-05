@@ -430,12 +430,10 @@ def main() -> int:
     p.add_argument("--output", required=True,
                    help="path to write Check.lean")
     p.add_argument("--submission-module",
-                   default="Challenges.Submission",
+                   default="Submission.Main",
                    help="Lean module that defines `Submission.challenge_N`. "
-                        "Default `Challenges.Submission` for the single-file "
-                        "gist flow (CI emits a wrapped file there); use "
-                        "`Submission.Main` for the repo flow (user's Lake lib "
-                        "lives at the project root).")
+                        "`Submission.Main` for the repo flow (the user's Lake "
+                        "lib spliced in at the project root).")
     args = p.parse_args()
 
     template = CHECKS.get(args.problem)

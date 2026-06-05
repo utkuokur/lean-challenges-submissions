@@ -12,43 +12,28 @@ body:
         ∀r form, use the "Submit a proof of the universal conjecture"
         form instead.
 
+        Provide your proof as a **GitHub repository** containing a
+        `Submission/Main.lean` (with the relevant `r` and
+        `theorem challenge_N` inside `namespace Submission`), plus any
+        helpers as `Submission/<Name>.lean`.
+
         New to submitting? See the [submission guide on the
         website](https://utkuokur.github.io/lean-challenges/#submit) for
-        how to provide your proof (single file vs. repository) and what
-        the CI checks.
+        the expected repo layout and what the CI checks.
 
-        **Keeping your proof private?** Submit a **private GitHub repo**
-        (the Repository URL field) and install the `lean-challenge-bot`
-        GitHub App on it — install link is in this repo's README — so the
-        CI can clone it. Your source is never published: only your
-        leaderboard row is. A single-file Submission URL must be public.
-
-  - type: input
-    id: source_url
-    attributes:
-      label: Submission URL
-      description: Raw URL to a single, PUBLIC `.lean` file. Leave blank if submitting a repo (use a repo to keep your proof private).
-      placeholder: https://raw.githubusercontent.com/me/my-proofs/main/challenge_01.lean
-    validations:
-      required: false
+        **Keeping your proof private?** Use a **private** GitHub repo and
+        install the `lean-challenge-bot` GitHub App on it — install link
+        is in this repo's README — so the CI can clone it. Your source is
+        never published: only your leaderboard row is.
 
   - type: input
     id: repo_url
     attributes:
       label: Repository URL
-      description: HTTPS URL of your GitHub repo — public, or PRIVATE with the `lean-challenge-bot` App installed (see README). Leave blank if submitting a single file.
+      description: HTTPS URL of your GitHub repo — public, or PRIVATE with the `lean-challenge-bot` App installed (see README). CI evaluates the `main` branch.
       placeholder: https://github.com/me/my-proofs
     validations:
-      required: false
-
-  - type: input
-    id: repo_ref
-    attributes:
-      label: Git ref
-      description: Branch or tag to evaluate (repo submissions only). Defaults to `main`.
-      placeholder: main
-    validations:
-      required: false
+      required: true
 
   - type: dropdown
     id: problem_id
@@ -100,7 +85,7 @@ body:
     attributes:
       label: Acknowledgements
       options:
-        - label: I understand the CI will fetch the URL (or shallow-clone the repo) above and run `lake build` against the canonical environment.
+        - label: I understand the CI will shallow-clone the repository above and run `lake build` against the canonical environment.
           required: true
         - label: I understand my nickname, name, problem, claim, and parameter will be published on the public leaderboard (but not my proof source).
           required: true

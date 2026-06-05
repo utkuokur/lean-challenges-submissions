@@ -22,11 +22,10 @@ on, and — importantly — where they are **weaker** than the upstream
 
 ## 2. How confidentiality is achieved
 
-1. **Private source via the `lean-challenge-bot` App, not a public URL.**
-   Repo submissions are cloned with a step-scoped installation token; a
+1. **Private source via the `lean-challenge-bot` App.** Submissions are
+   always a GitHub repo, cloned with a step-scoped installation token; a
    private repo with the App installed clones, a private repo without it
-   is rejected with instructions. Single-file (gist/raw-URL) submissions
-   remain public-only.
+   is rejected with instructions.
 2. **Source is never deliberately published.** The old pipeline committed
    every accepted proof into a public `solutions/` directory and linked
    it from the leaderboard via `source_url`. Both are removed: the

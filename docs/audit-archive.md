@@ -31,8 +31,7 @@ audit/
 The submission-issue number is globally unique in this repo, so it alone
 makes the path unique; `{problem}` and `{param}` are appended for
 human-readability. The tarball is the same `source.tar.gz` the evaluator
-saw: in gist mode the single submitted `.lean`; in repo mode the
-evaluated `Submission/` tree.
+saw: the evaluated `Submission/` tree from the submitted repo.
 
 Encryption uses [`age`](https://github.com/FiloSottile/age) with the
 recipients in [`.audit/recipients.txt`](../.audit/recipients.txt). The
