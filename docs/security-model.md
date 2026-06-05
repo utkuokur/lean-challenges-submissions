@@ -77,10 +77,10 @@ on, and — importantly — where they are **weaker** than the upstream
   co-resident in a single run. Tightening to a filesystem sandbox (bind
   only the build dir read-write, rest read-only) is the next hardening
   step if needed.
-- **Unverified locally.** The sandbox was added without a local
-  Lean/Linux environment to test it. The workflow falls back to a
-  non-isolated build (with a `::warning::`) if bubblewrap cannot
-  initialise a namespace on the runner, so it will not hard-fail every
+- **Sandbox engagement is runner-dependent.** Whether bubblewrap can
+  initialise a network namespace depends on the CI runner, not on local
+  tooling. The workflow falls back to a non-isolated build (with a
+  `::warning::`) if it cannot, so it will not hard-fail every
   submission — but confirm on a real CI run that bubblewrap engages and
   that legitimate submissions still compile offline before relying on it.
 - **Public Actions logs.** While this submissions repo is **public**, its

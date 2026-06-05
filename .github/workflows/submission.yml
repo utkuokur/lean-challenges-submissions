@@ -443,9 +443,10 @@ jobs:
         # step never hard-fails) so the audit `archive` job still runs for a
         # non-compiling submission; `record` is gated on ok == 'true'.
         #
-        # NOTE: untested from the author's machine (no Lean/Linux locally) —
-        # confirm on a real CI run that bubblewrap is available and the
-        # offline compile succeeds before relying on it. See docs/security-model.md.
+        # NOTE: whether bubblewrap can unshare a network namespace is a
+        # property of the CI runner, not the build — confirm on a real CI
+        # run that the sandbox engages (rather than the fallback below) and
+        # that the offline compile succeeds. See docs/security-model.md.
         run: |
           set +e
           if bwrap --unshare-net --dev-bind / / true 2>/dev/null; then
