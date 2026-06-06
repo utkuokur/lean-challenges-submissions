@@ -22,15 +22,16 @@ body:
         the expected repo layout and what the CI checks.
 
         **Keeping your proof private?** Use a **private** GitHub repo and
-        install the `lean-challenge-bot` GitHub App on it — install link
-        is in this repo's README — so the CI can clone it. Your source is
-        never published: only your leaderboard row is.
+        install the [`lean-challenge-bot` GitHub
+        App](https://github.com/apps/lean-challenge-bot) on it so the CI
+        can clone it. Your source is never published: only your
+        leaderboard row is.
 
   - type: input
     id: repo_url
     attributes:
       label: Repository URL
-      description: HTTPS URL of your GitHub repo — public, or PRIVATE with the `lean-challenge-bot` App installed (see README). CI evaluates the `main` branch.
+      description: HTTPS URL of your GitHub repo — public, or PRIVATE with the [`lean-challenge-bot` App](https://github.com/apps/lean-challenge-bot) installed. CI evaluates the `main` branch.
       placeholder: https://github.com/me/my-proofs
     validations:
       required: true
