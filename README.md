@@ -52,6 +52,17 @@ appearing on the leaderboard:
 1. Host your proof in a **private** GitHub repo.
 2. Install the **`lean-challenge-bot`** GitHub App on that repo so the CI
    can clone it: **<https://github.com/apps/lean-challenge-bot>**.
+3. **Verify the install** — this is the step people most often miss. After
+   installing, go to your repo's **Settings → GitHub Apps** (or
+   <https://github.com/settings/installations>). `lean-challenge-bot` should
+   be listed, and if you chose **"Only select repositories"** during install,
+   your submission repo must be ticked under its *Repository access*. The app
+   needs only **Contents: Read** — nothing else.
+
+If CI replies *"Could not clone the (private) repo …"*, the App isn't
+installed on (or granted access to) that repo. Fix the access above and
+**re-open the issue** to retry. Public repos don't need the App at all — CI
+clones them anonymously.
 
 What is and isn't visible:
 
