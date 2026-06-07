@@ -1,5 +1,5 @@
 name: Submit a proof of the universal conjecture
-description: Settle one of the universal (∀r) challenges, either by proving or disproving it.
+description: Settle one of the universal (∀r) challenges by proving the conjecture or its negation.
 title: "[submission] "
 labels:
   - submission
@@ -7,10 +7,10 @@ body:
   - type: markdown
     attributes:
       value: |
-        Submit a proof (or counterexample) for the **universal** form of
-        one of the challenges — the ∀r version that quantifies over all
-        parameters. If you're settling a specific value of `r`, use the
-        "Submit a proof for a specific r" form instead.
+        Settle the **universal** (∀r) form of one of the challenges — the
+        version that quantifies over all parameters — by proving the
+        conjecture or its negation. If you're settling a specific value of
+        `r`, use the "Submit a proof for a specific r" form instead.
 
         Provide your proof as a **GitHub repository** containing a
         `Submission/Main.lean` (with the relevant `r` and
