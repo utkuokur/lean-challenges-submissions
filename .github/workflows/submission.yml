@@ -268,7 +268,11 @@ jobs:
             exit 1
           fi
           # Splice the user's Submission/ into the canonical checkout as a
-          # sibling Lake lib of `Challenges`.
+          # sibling Lake lib of `Challenges`. The problem-set repo ships an
+          # empty `Submission/` scaffold for cloners to edit, so drop any
+          # pre-existing copy first — otherwise `cp` would nest the user's
+          # tree at `Submission/Submission` and the build would not find it.
+          rm -rf lean-challenge/Submission
           cp -r /tmp/user-repo/Submission lean-challenge/Submission
           printf '\n[[lean_lib]]\nname = "Submission"\n' >> lean-challenge/lakefile.toml
           # source tarball = the evaluated Submission/ tree
