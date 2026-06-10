@@ -96,10 +96,10 @@ example : ErdosHajnalConjectureFor (pathGraph Submission.r) :=
 import Challenges.challenge_06
 import Challenges.Submission
 
-open SimpleGraph
-
 example :
-    IsBQO (fun (G H : SimpleGraph (Fin Submission.r)) => IsMinor H G) :=
+    if Submission.r % 2 = 0
+    then IsAlphaWQO PlanarGraph.MinorLE (Submission.r / 2)
+    else IsAlphaWQO FiniteGraph.MinorLE (Submission.r / 2) :=
   Submission.challenge_6
 """,
     "challenge_7": r"""
@@ -109,7 +109,8 @@ import Challenges.Submission
 open Function Matroid
 
 example {α : Type*} (hr : Submission.r > 0) :
-    ∃ n₀ : ℕ, ∀ n ≥ n₀, ∀ {M : Matroid α} {B : Fin n → Set α},
+    ∃ n₀ : ℕ, ∀ n ≥ n₀, ∀ {M : Matroid α} (_ : M.Finite)
+      (_ : M.eRank = (n : ℕ∞)) {B : Fin n → Set α},
       IsFamilyOfDisjointBases M B →
       ∀ (ε : ℝ), ε > 0 →
         let m := Nat.ceil ((1 - 1 / (Submission.r : ℝ) - ε) * (n : ℝ))
@@ -202,10 +203,7 @@ example : ∀ r : ℕ, ErdosHajnalConjectureFor (pathGraph r) :=
 import Challenges.challenge_06_univ
 import Challenges.Submission
 
-open SimpleGraph
-
-example :
-    ∀ r, IsBQO (fun (G H : SimpleGraph (Fin r)) => IsMinor H G) :=
+example : IsBQO FiniteGraph.MinorLE :=
   Submission.challenge_6
 """,
     "challenge_7_univ": r"""
@@ -214,7 +212,7 @@ import Challenges.Submission
 
 open Function Matroid
 
-example {α : Type*} :
+example {α : Type} [Fintype α] :
     ∀ (n : ℕ), ∀ {M : Matroid α} (_ : M.eRank = (n : ℕ∞)) {B : Fin n → Set α},
       IsFamilyOfDisjointBases M B →
       ∃ C : Fin n → Set α, IsFamilyOfDisjointBases M C ∧
@@ -308,10 +306,7 @@ example : ¬ ∀ r : ℕ, ErdosHajnalConjectureFor (pathGraph r) :=
 import Challenges.challenge_06_univ_disprove
 import Challenges.Submission
 
-open SimpleGraph
-
-example :
-    ¬ ∀ r, IsBQO (fun (G H : SimpleGraph (Fin r)) => IsMinor H G) :=
+example : ¬ IsBQO FiniteGraph.MinorLE :=
   Submission.challenge_6
 """,
     "challenge_7_univ_disprove": r"""
