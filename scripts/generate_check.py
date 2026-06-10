@@ -58,9 +58,9 @@ import Challenges.Submission
 
 open Function Matroid
 
-example {α : Type*} (p m : ℕ) [Fact p.Prime] (hr : Submission.r = p ^ m) :
-    ∃ L : Set (Matroid α), CompleteExcludedMinorList (IsGFRepresentable p m) L :=
-  Submission.challenge_2 p m hr
+example (p m : ℕ) [Fact p.Prime] (hm : 0 < m) (hr : Submission.r = p ^ m) :
+    CompleteExcludedMinorList.{u} p m Submission.L :=
+  Submission.challenge_2 p m hm hr
 """,
     "challenge_3": r"""
 import Challenges.challenge_03
@@ -122,27 +122,29 @@ example {α : Type*} (hr : Submission.r > 0) :
 import Challenges.challenge_08
 import Challenges.Submission
 
-example : Hypergraph.RyserConjectureFor.{u} Submission.r :=
-  Submission.challenge_8
+example (hr : 2 <= Submission.r) :
+    Challenge08.Hypergraph.RyserConjectureFor.{u} Submission.r :=
+  Submission.challenge_8 hr
 """,
     "challenge_9": r"""
 import Challenges.challenge_09
 import Challenges.Submission
 
-example : Challenge09.Hypergraph.RyserConjectureFor.{u} Submission.r :=
-  Submission.challenge_9
+example {U : Type u} [DecidableEq U] {F : Finset (Finset U)}
+    (h_union_closed : Challenge09.IsUnionClosed F)
+    (h_nontrivial : Challenge09.Nondegenerate F) :
+    ∃ x, Challenge09.InGround F x ∧
+      Challenge09.density F x ≥ (1 / 2 : Rat) - 1 / ((Submission.r : Rat) + 2) :=
+  Submission.challenge_9 h_union_closed h_nontrivial
 """,
     "challenge_10": r"""
 import Challenges.challenge_10
 import Challenges.Submission
 
-example {U : Type u} [DecidableEq U] (hr : 2 < Submission.r)
-    {F : Finset (Finset U)}
-    (h_union_closed : Challenge10.IsUnionClosed F)
-    (h_nontrivial : Challenge10.Nondegenerate F) :
-    ∃ x, Challenge10.InGround F x ∧
-      Challenge10.density F x ≥ (1 / 2 : Rat) - 1 / (Submission.r : Rat) :=
-  Submission.challenge_10 hr h_union_closed h_nontrivial
+example :
+    UnfriendlyPartition.ScaledUnfriendlyPartitionConjectureFor.{u, v}
+      (Submission.r : Ordinal.{v}) :=
+  Submission.challenge_10
 """,
 
     # ─── Universal challenges (∀r built into the theorem) ──────────────
@@ -162,9 +164,9 @@ import Challenges.Submission
 
 open Function Matroid
 
-example {α : Type*} (r p m : ℕ) [Fact p.Prime] (hr : r = p ^ m) :
-    ∃ L : Set (Matroid α), CompleteExcludedMinorList (IsGFRepresentable p m) L :=
-  Submission.challenge_2 r p m hr
+example (r p m : ℕ) [Fact p.Prime] (hm : 0 < m) (hr : r = p ^ m) :
+    ∃ L : Set (Matroid ℕ), CompleteExcludedMinorList.{u} p m L :=
+  Submission.challenge_2 r p m hm hr
 """,
     "challenge_3_univ": r"""
 import Challenges.challenge_03_univ
@@ -267,9 +269,8 @@ import Challenges.Submission
 open Function Matroid
 
 example :
-    ¬ ∀ {α : Type*} (r p m : ℕ) [Fact p.Prime], r = p ^ m →
-      ∃ L : Set (Matroid α),
-        CompleteExcludedMinorList (IsGFRepresentable p m) L :=
+    ¬ ∀ (r p m : ℕ) [Fact p.Prime], 0 < m → r = p ^ m →
+      ∃ L : Set (Matroid ℕ), CompleteExcludedMinorList.{u} p m L :=
   Submission.challenge_2
 """,
     "challenge_3_univ_disprove": r"""
