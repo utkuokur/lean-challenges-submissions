@@ -49,7 +49,7 @@ import Challenges.Submission
 open SimpleGraph
 
 example {V : Type*} [Fintype V] (G : SimpleGraph V) :
-    hadwigerNumber G ≤ Submission.r → G.Colorable (Submission.r + 1) :=
+    hadwigerNumber G ≤ Submission.r → G.Colorable Submission.r :=
   Submission.challenge_1 G
 """,
     "challenge_2": r"""
@@ -155,7 +155,7 @@ import Challenges.Submission
 open SimpleGraph
 
 example {V : Type*} [Fintype V] (G : SimpleGraph V) :
-    ∀ r, hadwigerNumber G ≤ r → G.Colorable (r + 1) :=
+    ∀ r, hadwigerNumber G ≤ r → G.Colorable r :=
   Submission.challenge_1 G
 """,
     "challenge_2_univ": r"""
@@ -259,7 +259,7 @@ open SimpleGraph
 
 example :
     ¬ ∀ {V : Type*} [Fintype V] (G : SimpleGraph V),
-      ∀ r, hadwigerNumber G ≤ r → G.Colorable (r + 1) :=
+      ∀ r, hadwigerNumber G ≤ r → G.Colorable r :=
   Submission.challenge_1
 """,
     "challenge_2_univ_disprove": r"""
@@ -424,6 +424,29 @@ def problem_number(problem_id: str) -> int:
     return int(m.group(1))
 
 
+def render_check(problem: str, submission_module: str) -> str:
+    """Assemble the complete Check.lean body for `problem`, importing the
+    user's proof from `submission_module`. Raises KeyError for unknown ids.
+
+    Every template hardcodes `import Challenges.Submission` — rewrite to
+    the caller-supplied module so the same templates serve both submission
+    flows. We deliberately match the import line as a literal, not a regex,
+    so a stray occurrence in an `example` body would not be touched.
+    Use `.replace`, not `.format`, for the tail because it contains Lean's
+    `m!"...{ax}..."` interpolation — `.format` would try to substitute the
+    Lean braces and crash."""
+    template = CHECKS[problem].replace(
+        "import Challenges.Submission",
+        f"import {submission_module}",
+    )
+    n = problem_number(problem)
+    return (
+        AXIOM_CHECK_IMPORT
+        + template.lstrip("\n")
+        + AXIOM_CHECK_TAIL.replace("%N%", str(n))
+    )
+
+
 def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--problem", required=True,
@@ -437,29 +460,11 @@ def main() -> int:
                         "lib spliced in at the project root).")
     args = p.parse_args()
 
-    template = CHECKS.get(args.problem)
-    if template is None:
+    if args.problem not in CHECKS:
         sys.exit(f"Unknown problem id: {args.problem!r}. "
                  f"Known: {', '.join(sorted(CHECKS))}")
 
-    # Every template hardcodes `import Challenges.Submission` — rewrite to
-    # the caller-supplied module so the same templates serve both submission
-    # flows. We deliberately match the import line as a literal, not a regex,
-    # so a stray occurrence in an `example` body would not be touched.
-    template = template.replace(
-        "import Challenges.Submission",
-        f"import {args.submission_module}",
-    )
-
-    n = problem_number(args.problem)
-    # Use `.replace`, not `.format`, because the tail contains Lean's
-    # `m!"...{ax}..."` interpolation. `.format` would try to substitute
-    # the Lean braces and crash.
-    body = (
-        AXIOM_CHECK_IMPORT
-        + template.lstrip("\n")
-        + AXIOM_CHECK_TAIL.replace("%N%", str(n))
-    )
+    body = render_check(args.problem, args.submission_module)
     with open(args.output, "w", encoding="utf-8") as f:
         f.write(body)
     print(f"Wrote signature + axiom check for {args.problem} to "

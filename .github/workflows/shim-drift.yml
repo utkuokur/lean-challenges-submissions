@@ -1,0 +1,63 @@
+name: Shim drift check
+
+# The canonical theorem statements (utkuokur/lean-challenges) and the CHECKS
+# templates in scripts/generate_check.py hold the same signatures in two
+# places, and they must move in lockstep. This workflow rebuilds every shim
+# against a mock submission that re-exports the canonical (sorry-backed)
+# theorem; a template that drifted fails with a type error, while an in-sync
+# one fails only at the sorryAx axiom gate. See scripts/shim_drift_check.py.
+#
+# The mirror-image workflow in utkuokur/lean-challenges runs the same script
+# on every push that touches Challenges/** — that side catches canon edits,
+# this side catches template edits.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/generate_check.py"
+      - "scripts/shim_drift_check.py"
+      - ".github/workflows/shim-drift.yml"
+  workflow_dispatch:
+  schedule:
+    # Weekly safety net in case a canon-side push slipped past the mirror
+    # workflow (e.g. it was edited or skipped).
+    - cron: "17 4 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: shim-drift
+  cancel-in-progress: true
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/checkout@v4
+        with:
+          repository: utkuokur/lean-challenges
+          ref: main
+          path: lean-challenge
+          persist-credentials: false
+
+      - name: Install elan
+        run: |
+          set -e
+          curl -fsSL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh \
+            -o /tmp/elan-init.sh
+          sh /tmp/elan-init.sh -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Fetch Mathlib cache
+        working-directory: lean-challenge
+        run: lake exe cache get || true
+
+      - name: Check every shim against the canon
+        run: python3 scripts/shim_drift_check.py --project lean-challenge
