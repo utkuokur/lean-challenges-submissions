@@ -106,18 +106,8 @@ example :
 import Challenges.challenge_07
 import Challenges.Submission
 
-open Function Matroid
-
-example {α : Type*} (hr : Submission.r > 0) :
-    ∃ n₀ : ℕ, ∀ n ≥ n₀, ∀ {M : Matroid α} (_ : M.Finite)
-      (_ : M.eRank = (n : ℕ∞)) {B : Fin n → Set α},
-      IsFamilyOfDisjointBases M B →
-      ∀ (ε : ℝ), ε > 0 →
-        let m := Nat.ceil ((1 - 1 / (Submission.r : ℝ) - ε) * (n : ℝ))
-        ∃ C : Fin m → Set α,
-          IsFamilyOfDisjointBases M C ∧
-          ∀ (i : Fin n) (j : Fin m), (B i ∩ C j).ncard = 1 :=
-  Submission.challenge_7 hr
+example : spherePackingConstant Submission.r = latticePackingConstant Submission.r :=
+  Submission.challenge_7
 """,
     "challenge_8": r"""
 import Challenges.challenge_08
@@ -210,13 +200,7 @@ example : IsBQO FiniteGraph.MinorLE :=
 import Challenges.challenge_07_univ
 import Challenges.Submission
 
-open Function Matroid
-
-example {α : Type} [Fintype α] :
-    ∀ (n : ℕ), ∀ {M : Matroid α} (_ : M.eRank = (n : ℕ∞)) {B : Fin n → Set α},
-      IsFamilyOfDisjointBases M B →
-      ∃ C : Fin n → Set α, IsFamilyOfDisjointBases M C ∧
-        ∀ (i j : Fin n), (B i ∩ C j).ncard = 1 :=
+example : ∀ (r : ℕ), spherePackingConstant r = latticePackingConstant r :=
   Submission.challenge_7
 """,
     "challenge_8_univ": r"""
@@ -313,14 +297,7 @@ example : ¬ IsBQO FiniteGraph.MinorLE :=
 import Challenges.challenge_07_univ_disprove
 import Challenges.Submission
 
-open Function Matroid
-
-example {α : Type} [Fintype α] :
-    ¬ ∀ (n : ℕ), ∀ {M : Matroid α} (_ : M.eRank = (n : ℕ∞))
-      {B : Fin n → Set α},
-      IsFamilyOfDisjointBases M B →
-      ∃ C : Fin n → Set α, IsFamilyOfDisjointBases M C ∧
-        ∀ (i j : Fin n), (B i ∩ C j).ncard = 1 :=
+example : ¬ ∀ (r : ℕ), spherePackingConstant r = latticePackingConstant r :=
   Submission.challenge_7
 """,
     "challenge_8_univ_disprove": r"""
