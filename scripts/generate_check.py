@@ -79,9 +79,9 @@ import Challenges.Submission
 
 open SimpleGraph
 
-example {V : Type*} [Fintype V] :
-    ∀ (G : SimpleGraph V), SidorenkoFor (halfGraph Submission.r) G :=
-  Submission.challenge_4
+example {W V : Type} [Fintype W] [Fintype V] (H : SimpleGraph W) (G : SimpleGraph V) :
+    BipartiteBoundedBy H Submission.r → SidorenkoFor H G :=
+  Submission.challenge_4 H G
 """,
     "challenge_5": r"""
 import Challenges.challenge_05
