@@ -246,9 +246,7 @@ import Challenges.Submission
 
 universe u
 
-example :
-    ∀ {V : Type u}, Countable V → ∀ G : SimpleGraph V,
-      ∃ f : V → Bool, IsUnfriendlyPartition G f :=
+example : UnfriendlyPartitionConjecture.{u} :=
   Submission.challenge_10
 """,
 
@@ -341,9 +339,7 @@ import Challenges.Submission
 
 universe u
 
-example :
-    ¬ ∀ {V : Type u}, Countable V → ∀ G : SimpleGraph V,
-      ∃ f : V → Bool, IsUnfriendlyPartition G f :=
+example : ¬ UnfriendlyPartitionConjecture.{u} :=
   Submission.challenge_10
 """,
 }
