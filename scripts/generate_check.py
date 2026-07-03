@@ -56,11 +56,20 @@ example {V : Type*} [Fintype V] (G : SimpleGraph V) :
 import Challenges.challenge_02
 import Challenges.Submission
 
-open Function Matroid
+open Function Matroid FinMatroid
 
-example (p m : ℕ) [Fact p.Prime] (hm : 0 < m) (hr : Submission.r = p ^ m) :
-    CompleteExcludedMinorList.{u} p m Submission.L :=
-  Submission.challenge_2 p m hm hr
+universe u
+
+example :
+    0 < Submission.m ∧ Submission.r = Submission.p ^ Submission.m ∧
+    (∀ A ∈ Submission.L, IsMatroidData A) ∧
+    (∀ A ∈ Submission.L,
+      IsExcludedMinorFor (IsGFRepresentable Submission.p Submission.m) A.decode) ∧
+    (∀ A ∈ Submission.L, ∀ B ∈ Submission.L, A ≠ B → IsEmpty (A.decode ≂ B.decode)) ∧
+    (∀ {β : Type u} (M : Matroid β), M.Finite →
+        ¬ IsGFRepresentable Submission.p Submission.m M →
+          ∃ A ∈ Submission.L, Nonempty (A.decode ≤i M)) :=
+  Submission.challenge_2
 """,
     "challenge_3": r"""
 import Challenges.challenge_03
@@ -79,7 +88,8 @@ import Challenges.Submission
 
 open SimpleGraph
 
-example {W V : Type} [Fintype W] [Fintype V] (H : SimpleGraph W) (G : SimpleGraph V) :
+example {W V : Type} [Fintype W] [Fintype V] (H : SimpleGraph W) (G : SimpleGraph V)
+    [Nonempty V] :
     BipartiteBoundedBy H Submission.r → SidorenkoFor H G :=
   Submission.challenge_4 H G
 """,
@@ -113,19 +123,23 @@ example : spherePackingConstant Submission.r = latticePackingConstant Submission
 import Challenges.challenge_08
 import Challenges.Submission
 
+universe u
+
 example (hr : 2 <= Submission.r) :
-    Challenge08.Hypergraph.RyserConjectureFor.{u} Submission.r :=
+    Hypergraph.RyserConjectureFor.{u} Submission.r :=
   Submission.challenge_8 hr
 """,
     "challenge_9": r"""
 import Challenges.challenge_09
 import Challenges.Submission
 
+universe u
+
 example {U : Type u} [DecidableEq U] {F : Finset (Finset U)}
-    (h_union_closed : Challenge09.IsUnionClosed F)
-    (h_nontrivial : Challenge09.Nondegenerate F) :
-    ∃ x, Challenge09.InGround F x ∧
-      Challenge09.density F x ≥ (1 / 2 : Rat) - 1 / ((Submission.r : Rat) + 2) :=
+    (h_union_closed : IsUnionClosed F)
+    (h_nontrivial : Nondegenerate F) :
+    ∃ x, InGround F x ∧
+      density F x ≥ (1 / 2 : Rat) - 1 / ((Submission.r : Rat) + 2) :=
   Submission.challenge_9 h_union_closed h_nontrivial
 """,
     "challenge_10": r"""
@@ -176,8 +190,9 @@ import Challenges.Submission
 
 open SimpleGraph
 
-example {V : Type*} [Fintype V] :
-    ∀ r, ∀ (G : SimpleGraph V), SidorenkoFor (halfGraph r) G :=
+example {W V : Type} [Fintype W] [Fintype V] [Nonempty V] :
+    ∀ r : ℕ, ∀ (H : SimpleGraph W) (G : SimpleGraph V),
+      BipartiteBoundedBy H r → SidorenkoFor H G :=
   Submission.challenge_4
 """,
     "challenge_5_univ": r"""
@@ -207,34 +222,40 @@ example : ∀ (r : ℕ), spherePackingConstant r = latticePackingConstant r :=
 import Challenges.challenge_08_univ
 import Challenges.Submission
 
-example : Challenge08.RyserHypergraphConjecture.{u} :=
+universe u
+
+example : RyserHypergraphConjecture.{u} :=
   Submission.challenge_8
 """,
     "challenge_9_univ": r"""
 import Challenges.challenge_09_univ
 import Challenges.Submission
 
-example {U : Type} [Fintype U] [DecidableEq U] :
-    ∀ (r : Nat) (_ : 2 < r) {F : Finset (Finset U)}
-      (_ : Challenge09.IsUnionClosed F) (_ : Challenge09.Nondegenerate F),
-      ∃ x, Challenge09.InGround F x ∧
-        Challenge09.density F x ≥ (1 / 2 : Rat) - 1 / (r : Rat) :=
+universe u
+
+example :
+    ∀ r : ℕ, ∀ {U : Type u} [DecidableEq U] {F : Finset (Finset U)},
+      IsUnionClosed F → Nondegenerate F →
+        ∃ x, InGround F x ∧
+          density F x ≥ (1 / 2 : Rat) - 1 / ((r : Rat) + 2) :=
   Submission.challenge_9
 """,
     "challenge_10_univ": r"""
 import Challenges.challenge_10_univ
 import Challenges.Submission
 
-example :
-    ∀ {V : Type} [Fintype V] [DecidableEq V] (G : SimpleGraph V),
-      ∃ P : Challenge10.Partition V, Challenge10.IsUnfriendly G P :=
+universe u
+
+example : UnfriendlyPartition.UnfriendlyPartitionConjecture.{u} :=
   Submission.challenge_10
 """,
 
     # ─── Universal challenges, disprove direction ─────────────────────
     # The submitter exhibits a counterexample to the universal claim.
-    "challenge_1_univ_disprove": r"""
-import Challenges.challenge_01_univ_disprove
+    # challenge_2 deliberately has no disprove slot: its universal form is
+    # the Geelen–Gerards–Whittle THEOREM, so the negation is unwinnable.
+    "challenge_1_disprove": r"""
+import Challenges.challenge_01_disprove
 import Challenges.Submission
 
 open SimpleGraph
@@ -244,19 +265,8 @@ example :
       ∀ r, hadwigerNumber G ≤ r → G.Colorable r :=
   Submission.challenge_1
 """,
-    "challenge_2_univ_disprove": r"""
-import Challenges.challenge_02_univ_disprove
-import Challenges.Submission
-
-open Function Matroid
-
-example :
-    ¬ ∀ (r p m : ℕ) [Fact p.Prime], 0 < m → r = p ^ m →
-      ∃ L : Set (Matroid ℕ), CompleteExcludedMinorList.{u} p m L :=
-  Submission.challenge_2
-""",
-    "challenge_3_univ_disprove": r"""
-import Challenges.challenge_03_univ_disprove
+    "challenge_3_disprove": r"""
+import Challenges.challenge_03_disprove
 import Challenges.Submission
 
 open Filter
@@ -266,19 +276,20 @@ example :
       ∀ᶠ t in atTop, d₁ ^ t ≤ ramseyNumber t ∧ ramseyNumber t ≤ d₂ ^ t :=
   Submission.challenge_3
 """,
-    "challenge_4_univ_disprove": r"""
-import Challenges.challenge_04_univ_disprove
+    "challenge_4_disprove": r"""
+import Challenges.challenge_04_disprove
 import Challenges.Submission
 
 open SimpleGraph
 
 example :
-    ¬ ∀ {V : Type*} [Fintype V], ∀ r, ∀ (G : SimpleGraph V),
-      SidorenkoFor (halfGraph r) G :=
+    ¬ ∀ {W V : Type} [Fintype W] [Fintype V] [Nonempty V],
+      ∀ r : ℕ, ∀ (H : SimpleGraph W) (G : SimpleGraph V),
+        BipartiteBoundedBy H r → SidorenkoFor H G :=
   Submission.challenge_4
 """,
-    "challenge_5_univ_disprove": r"""
-import Challenges.challenge_05_univ_disprove
+    "challenge_5_disprove": r"""
+import Challenges.challenge_05_disprove
 import Challenges.Submission
 
 open SimpleGraph
@@ -286,46 +297,49 @@ open SimpleGraph
 example : ¬ ∀ r : ℕ, ErdosHajnalConjectureFor (pathGraph r) :=
   Submission.challenge_5
 """,
-    "challenge_6_univ_disprove": r"""
-import Challenges.challenge_06_univ_disprove
+    "challenge_6_disprove": r"""
+import Challenges.challenge_06_disprove
 import Challenges.Submission
 
 example : ¬ IsBQO FiniteGraph.MinorLE :=
   Submission.challenge_6
 """,
-    "challenge_7_univ_disprove": r"""
-import Challenges.challenge_07_univ_disprove
+    "challenge_7_disprove": r"""
+import Challenges.challenge_07_disprove
 import Challenges.Submission
 
 example : ¬ ∀ (r : ℕ), spherePackingConstant r = latticePackingConstant r :=
   Submission.challenge_7
 """,
-    "challenge_8_univ_disprove": r"""
-import Challenges.challenge_08_univ_disprove
+    "challenge_8_disprove": r"""
+import Challenges.challenge_08_disprove
 import Challenges.Submission
 
-example : ¬ Challenge08.RyserHypergraphConjecture.{u} :=
+universe u
+
+example : ¬ RyserHypergraphConjecture.{u} :=
   Submission.challenge_8
 """,
-    "challenge_9_univ_disprove": r"""
-import Challenges.challenge_09_univ_disprove
+    "challenge_9_disprove": r"""
+import Challenges.challenge_09_disprove
 import Challenges.Submission
 
+universe u
+
 example :
-    ¬ ∀ {U : Type} [Fintype U] [DecidableEq U]
-      (r : Nat) (_ : 2 < r) {F : Finset (Finset U)}
-      (_ : Challenge09.IsUnionClosed F) (_ : Challenge09.Nondegenerate F),
-      ∃ x, Challenge09.InGround F x ∧
-        Challenge09.density F x ≥ (1 / 2 : Rat) - 1 / (r : Rat) :=
+    ¬ ∀ r : ℕ, ∀ {U : Type u} [DecidableEq U] {F : Finset (Finset U)},
+      IsUnionClosed F → Nondegenerate F →
+        ∃ x, InGround F x ∧
+          density F x ≥ (1 / 2 : Rat) - 1 / ((r : Rat) + 2) :=
   Submission.challenge_9
 """,
-    "challenge_10_univ_disprove": r"""
-import Challenges.challenge_10_univ_disprove
+    "challenge_10_disprove": r"""
+import Challenges.challenge_10_disprove
 import Challenges.Submission
 
-example :
-    ¬ ∀ {V : Type} [Fintype V] [DecidableEq V] (G : SimpleGraph V),
-      ∃ P : Challenge10.Partition V, Challenge10.IsUnfriendly G P :=
+universe u
+
+example : ¬ UnfriendlyPartition.UnfriendlyPartitionConjecture.{u} :=
   Submission.challenge_10
 """,
 }
@@ -385,12 +399,12 @@ set_option linter.hashCommand false in
 def problem_number(problem_id: str) -> int:
     """Extract the leading numeric component of a problem id.
 
-    `challenge_1` -> 1, `challenge_10_univ_disprove` -> 10. The user's
+    `challenge_1` -> 1, `challenge_10_disprove` -> 10. The user's
     theorem is always named `Submission.challenge_<N>` regardless of the
     univ/disprove suffix, because the suffix only selects which canonical
     file we pin the signature against.
     """
-    m = re.match(r"^challenge_(\d+)(?:_univ(?:_disprove)?)?$", problem_id)
+    m = re.match(r"^challenge_(\d+)(?:_univ|_disprove)?$", problem_id)
     if not m:
         sys.exit(f"Cannot extract problem number from {problem_id!r}")
     return int(m.group(1))

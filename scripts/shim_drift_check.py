@@ -55,26 +55,30 @@ from generate_check import CHECKS, problem_number, render_check  # noqa: E402
 def canonical_name(problem_id: str) -> str:
     """Fully qualified name of the canonical theorem for `problem_id`.
 
-    Main and most univ theorems are top-level `challenge_N`; the univ
-    variants of 8-10 live inside their `ChallengeNN` namespaces, and every
-    disprove theorem lives inside `Disprove`. A wrong entry here fails
-    loudly in step 1 as an unknown identifier — update this function when
-    a canonical theorem moves."""
-    n = problem_number(problem_id)
-    if problem_id.endswith("_univ_disprove"):
-        return f"_root_.Disprove.challenge_{n}"
-    if problem_id.endswith("_univ") and n in (8, 9, 10):
-        return f"_root_.Challenge{n:02d}.challenge_{n}"
-    return f"_root_.challenge_{n}"
+    Since the July 2026 naming harmonization, every canonical theorem is
+    root-level and named exactly like its problem id: `challenge_N`,
+    `challenge_N_univ`, `challenge_N_disprove` (no `ChallengeNN`/`Disprove`
+    namespaces). A wrong entry here fails loudly in step 1 as an unknown
+    identifier — update this function if a canonical theorem ever moves."""
+    return f"_root_.{problem_id}"
 
 
 def mock_defs(problem_id: str) -> list[str]:
     """Submitter-parameter defs the mock must re-export."""
-    if problem_id.endswith(("_univ", "_univ_disprove")):
+    if problem_id.endswith(("_univ", "_disprove")):
         return []
     defs = ["def r := _root_.r"]
     if problem_id == "challenge_2":
-        defs.append("def L := _root_.L")
+        # challenge_2 solvers also exhibit the prime-power witnesses and the
+        # excluded-minor list. The `Fact` instance must be re-registered on
+        # `Submission.p` (a plain def is semireducible, so TC resolution
+        # does not see the canonical instance through it).
+        defs += [
+            "def p := _root_.p",
+            "def m := _root_.m",
+            "def L := _root_.L",
+            "instance : Fact p.Prime := _root_.fact_p_prime",
+        ]
     return defs
 
 

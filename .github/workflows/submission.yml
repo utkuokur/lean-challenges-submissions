@@ -125,9 +125,9 @@ jobs:
           problem_id = problem_raw.split()[0].strip()
           if scope == "universal":
               problem_id = problem_id + (
-                  "_univ_disprove" if claim == "disprove" else "_univ")
+                  "_disprove" if claim == "disprove" else "_univ")
 
-          m = re.match(r"^challenge_(\d+)(_univ(?:_disprove)?)?$", problem_id)
+          m = re.match(r"^challenge_(\d+)(_univ|_disprove)?$", problem_id)
           if not m:
               sys.exit(f"unrecognized problem id: {problem_id!r}")
           n = int(m.group(1))
