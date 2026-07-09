@@ -69,16 +69,11 @@ def mock_defs(problem_id: str) -> list[str]:
         return []
     defs = ["def r := _root_.r"]
     if problem_id == "challenge_2":
-        # challenge_2 solvers also exhibit the prime-power witnesses and the
-        # excluded-minor list. The `Fact` instance must be re-registered on
-        # `Submission.p` (a plain def is semireducible, so TC resolution
-        # does not see the canonical instance through it).
-        defs += [
-            "def p := _root_.p",
-            "def m := _root_.m",
-            "def L := _root_.L",
-            "instance : Fact p.Prime := _root_.fact_p_prime",
-        ]
+        # challenge_2 solvers also exhibit the excluded-minor list `L`. The
+        # prime-power witnesses `p`/`m` are existentially bound inside the
+        # statement (explicit-list form), so there are no top-level defs to
+        # re-export for them.
+        defs += ["def L := _root_.L"]
     return defs
 
 
