@@ -46,7 +46,7 @@ CHECKS: dict[str, str] = {
 import Challenges.challenge_01
 import Challenges.Submission
 
-example : HadwigerColoringFor Submission.r :=
+example : statement_01 Submission.r :=
   Submission.challenge_1
 """,
     "challenge_2": r"""
@@ -55,44 +55,42 @@ import Challenges.Submission
 
 universe u
 
-example : GFExcludedMinorConjectureFor.{u} Submission.r Submission.L :=
+example : statement_02.{u} Submission.r Submission.L :=
   Submission.challenge_2
 """,
     "challenge_3": r"""
 import Challenges.challenge_03
 import Challenges.Submission
 
-example : RamseyLadderFor Submission.r :=
+example : statement_03 Submission.r :=
   Submission.challenge_3
 """,
     "challenge_4": r"""
 import Challenges.challenge_04
 import Challenges.Submission
 
-example : SidorenkoBoundedFor Submission.r :=
+example : statement_04 Submission.r :=
   Submission.challenge_4
 """,
     "challenge_5": r"""
 import Challenges.challenge_05
 import Challenges.Submission
 
-open SimpleGraph
-
-example : ErdosHajnalConjectureFor (pathGraph Submission.r) :=
+example : statement_05 Submission.r :=
   Submission.challenge_5
 """,
     "challenge_6": r"""
 import Challenges.challenge_06
 import Challenges.Submission
 
-example : AlphaWQOMinorLadderFor Submission.r :=
+example : statement_06 Submission.r :=
   Submission.challenge_6
 """,
     "challenge_7": r"""
 import Challenges.challenge_07
 import Challenges.Submission
 
-example : SpherePackingEqLatticeFor Submission.r :=
+example : statement_07 Submission.r :=
   Submission.challenge_7
 """,
     "challenge_8": r"""
@@ -101,7 +99,7 @@ import Challenges.Submission
 
 universe u
 
-example : RyserChallengeFor.{u} Submission.r :=
+example : statement_08.{u} Submission.r :=
   Submission.challenge_8
 """,
     "challenge_9": r"""
@@ -110,7 +108,7 @@ import Challenges.Submission
 
 universe u
 
-example : UnionClosedDensityFor.{u} Submission.r :=
+example : statement_09.{u} Submission.r :=
   Submission.challenge_9
 """,
     "challenge_10": r"""
@@ -118,7 +116,7 @@ import Challenges.challenge_10
 import Challenges.Submission
 
 example :
-    UnfriendlyPartition.ScaledUnfriendlyPartitionConjectureFor.{u, v}
+    statement_10.{u, v}
       (Submission.r : Ordinal.{v}) :=
   Submission.challenge_10
 """,
@@ -128,7 +126,7 @@ example :
 import Challenges.challenge_01_univ
 import Challenges.Submission
 
-example : HadwigerColoringUniv :=
+example : ∀ r : ℕ, statement_01 r :=
   Submission.challenge_1
 """,
     # challenge_2 has no _univ slot: its universal form is the
@@ -138,35 +136,35 @@ example : HadwigerColoringUniv :=
 import Challenges.challenge_03_univ
 import Challenges.Submission
 
-example : RamseyLadderUniv :=
+example : ∀ r : ℕ, statement_03 r :=
   Submission.challenge_3
 """,
     "challenge_4_univ": r"""
 import Challenges.challenge_04_univ
 import Challenges.Submission
 
-example : SidorenkoBoundedUniv :=
+example : ∀ r : ℕ, statement_04 r :=
   Submission.challenge_4
 """,
     "challenge_5_univ": r"""
 import Challenges.challenge_05_univ
 import Challenges.Submission
 
-example : ErdosHajnalPathUniv :=
+example : ∀ r : ℕ, statement_05 r :=
   Submission.challenge_5
 """,
     "challenge_6_univ": r"""
 import Challenges.challenge_06_univ
 import Challenges.Submission
 
-example : AlphaWQOMinorLadderUniv :=
+example : ∀ r : Ordinal.{1}, statement_06 r :=
   Submission.challenge_6
 """,
     "challenge_7_univ": r"""
 import Challenges.challenge_07_univ
 import Challenges.Submission
 
-example : SpherePackingEqLatticeUniv :=
+example : ∀ r : ℕ, statement_07 r :=
   Submission.challenge_7
 """,
     "challenge_8_univ": r"""
@@ -175,7 +173,7 @@ import Challenges.Submission
 
 universe u
 
-example : RyserHypergraphConjecture.{u} :=
+example : ∀ r : ℕ, statement_08.{u} r :=
   Submission.challenge_8
 """,
     "challenge_9_univ": r"""
@@ -184,7 +182,7 @@ import Challenges.Submission
 
 universe u
 
-example : UnionClosedDensityUniv.{u} :=
+example : ∀ r : ℕ, statement_09.{u} r :=
   Submission.challenge_9
 """,
     "challenge_10_univ": r"""
@@ -193,7 +191,7 @@ import Challenges.Submission
 
 universe u v
 
-example : UnfriendlyPartitionConjecture.{u, v} :=
+example : ∀ r : Ordinal.{v}, statement_10.{u, v} r :=
   Submission.challenge_10
 """,
 
@@ -205,42 +203,42 @@ example : UnfriendlyPartitionConjecture.{u, v} :=
 import Challenges.challenge_01_disprove
 import Challenges.Submission
 
-example : ¬ HadwigerColoringUniv :=
+example : ¬ ∀ r : ℕ, statement_01 r :=
   Submission.challenge_1
 """,
     "challenge_3_disprove": r"""
 import Challenges.challenge_03_disprove
 import Challenges.Submission
 
-example : ¬ RamseyLadderUniv :=
+example : ¬ ∀ r : ℕ, statement_03 r :=
   Submission.challenge_3
 """,
     "challenge_4_disprove": r"""
 import Challenges.challenge_04_disprove
 import Challenges.Submission
 
-example : SidorenkoBoundedDisprove :=
+example : ¬ ∀ r : ℕ, statement_04 r :=
   Submission.challenge_4
 """,
     "challenge_5_disprove": r"""
 import Challenges.challenge_05_disprove
 import Challenges.Submission
 
-example : ¬ ErdosHajnalPathUniv :=
+example : ¬ ∀ r : ℕ, statement_05 r :=
   Submission.challenge_5
 """,
     "challenge_6_disprove": r"""
 import Challenges.challenge_06_disprove
 import Challenges.Submission
 
-example : ¬ AlphaWQOMinorLadderUniv :=
+example : ¬ ∀ r : Ordinal.{1}, statement_06 r :=
   Submission.challenge_6
 """,
     "challenge_7_disprove": r"""
 import Challenges.challenge_07_disprove
 import Challenges.Submission
 
-example : ¬ SpherePackingEqLatticeUniv :=
+example : ¬ ∀ r : ℕ, statement_07 r :=
   Submission.challenge_7
 """,
     "challenge_8_disprove": r"""
@@ -249,7 +247,7 @@ import Challenges.Submission
 
 universe u
 
-example : ¬ RyserHypergraphConjecture.{u} :=
+example : ¬ ∀ r : ℕ, statement_08.{u} r :=
   Submission.challenge_8
 """,
     "challenge_9_disprove": r"""
@@ -258,7 +256,7 @@ import Challenges.Submission
 
 universe u
 
-example : ¬ UnionClosedDensityUniv.{u} :=
+example : ¬ ∀ r : ℕ, statement_09.{u} r :=
   Submission.challenge_9
 """,
     "challenge_10_disprove": r"""
@@ -267,7 +265,7 @@ import Challenges.Submission
 
 universe u v
 
-example : ¬ UnfriendlyPartitionConjecture.{u, v} :=
+example : ¬ ∀ r : Ordinal.{v}, statement_10.{u, v} r :=
   Submission.challenge_10
 """,
 }
