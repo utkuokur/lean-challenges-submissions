@@ -28,20 +28,29 @@ name: Evaluate submission
 on:
   issues:
     types: [opened, labeled, reopened]
+  repository_dispatch:
+    types: [smoke-resubmit]
+
+env:
+  SUBMISSION_ISSUE_NUMBER: ${{ github.event.issue.number || github.event.client_payload.issue_number }}
+  SUBMISSION_ISSUE_BODY: ${{ github.event.issue.body || github.event.client_payload.issue_body }}
 
 concurrency:
-  group: submission-issue-${{ github.event.issue.number }}
+  group: submission-issue-${{ github.event.issue.number || github.event.client_payload.issue_number }}
   cancel-in-progress: false
 
 jobs:
   evaluate:
     if: |
-      github.event.issue.state == 'open'
-      && contains(github.event.issue.body, '### Problem')
-      && (
-        github.event.action == 'opened'
-        || github.event.action == 'reopened'
-        || (github.event.action == 'labeled' && github.event.label.name == 'submission')
+      github.event_name == 'repository_dispatch'
+      || (
+        github.event.issue.state == 'open'
+        && contains(github.event.issue.body, '### Problem')
+        && (
+          github.event.action == 'opened'
+          || github.event.action == 'reopened'
+          || (github.event.action == 'labeled' && github.event.label.name == 'submission')
+        )
       )
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -79,7 +88,7 @@ jobs:
       - name: Parse issue body
         id: parse
         env:
-          ISSUE_BODY: ${{ github.event.issue.body }}
+          ISSUE_BODY: ${{ env.SUBMISSION_ISSUE_BODY }}
         run: |
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
           import os, re, sys
@@ -224,7 +233,7 @@ jobs:
           OWNER_REPO: ${{ steps.owner.outputs.owner_repo }}
           # Passed via env (NOT `${{ }}` interpolation into the script) so
           # free-form, user-controlled fields cannot inject shell/Python.
-          ISSUE: ${{ github.event.issue.number }}
+          ISSUE: ${{ env.SUBMISSION_ISSUE_NUMBER }}
           PROBLEM_ID: ${{ steps.parse.outputs.problem_id }}
           PARAMETER: ${{ steps.parse.outputs.parameter }}
           CLAIM: ${{ steps.parse.outputs.claim }}
@@ -484,12 +493,12 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           REASON="${FETCH_ERROR:-The submission could not be processed. See the workflow logs.}"
-          gh issue comment ${{ github.event.issue.number }} \
+          gh issue comment "$SUBMISSION_ISSUE_NUMBER" \
             --repo "${{ github.repository }}" \
             --body "❌ Submission rejected: ${REASON}
 
           Workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          gh issue close ${{ github.event.issue.number }} \
+          gh issue close "$SUBMISSION_ISSUE_NUMBER" \
             --repo "${{ github.repository }}" --reason "not planned" || true
 
       - name: Comment on build failure
@@ -497,12 +506,12 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh issue comment ${{ github.event.issue.number }} \
+          gh issue comment "$SUBMISSION_ISSUE_NUMBER" \
             --repo "${{ github.repository }}" \
             --body "❌ Submission rejected: \`lake build\` of the signature shim failed. Most commonly your theorem's type does not match the canonical \`${{ steps.parse.outputs.problem_id }}\` signature (substituting your \`Submission.r\` for \`r\`), or the proof depends on a non-permitted axiom.
 
           Full build logs (maintainer-visible): ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          gh issue close ${{ github.event.issue.number }} \
+          gh issue close "$SUBMISSION_ISSUE_NUMBER" \
             --repo "${{ github.repository }}" --reason "not planned" || true
 
   # ─────────────────────────────────────────────────────────────────────
@@ -615,10 +624,10 @@ jobs:
               --leaderboard site-data/leaderboard.json \
               --nickname "$NICK" --name "$NAME" \
               --problem "$PROBLEM" --claim "$CLAIM" --parameter "$PARAM" \
-              --issue "${{ github.event.issue.number }}" \
+              --issue "$SUBMISSION_ISSUE_NUMBER" \
               $PUBLIC_FLAG "${SRC_ARG[@]}"
             git add site-data/leaderboard.json
-            git commit -m "leaderboard: issue #${{ github.event.issue.number }}" || true
+            git commit -m "leaderboard: issue #${SUBMISSION_ISSUE_NUMBER}" || true
             if git push origin HEAD:main; then
               break
             fi
@@ -633,14 +642,14 @@ jobs:
           M=/tmp/meta/metadata.json
           PROBLEM=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['problem_id'])" "$M")
           MODULE=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['module'])" "$M")
-          gh issue comment ${{ github.event.issue.number }} \
+          gh issue comment "$SUBMISSION_ISSUE_NUMBER" \
             --repo "${{ github.repository }}" \
             --body "✅ Build succeeded — added to the leaderboard.
 
           - Problem: \`${PROBLEM}\`
           - Module built: \`Challenges.${MODULE}\`
           - An encrypted copy of your submission was archived for audit; your source was not published."
-          gh issue close ${{ github.event.issue.number }} \
+          gh issue close "$SUBMISSION_ISSUE_NUMBER" \
             --repo "${{ github.repository }}" --reason completed
 
   # ─────────────────────────────────────────────────────────────────────
@@ -671,5 +680,5 @@ jobs:
           else
             BODY="⚠️ Your proof compiled and was archived, but recording it to the leaderboard did not complete (record job: $RECORD_RESULT). A maintainer will investigate. Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           fi
-          gh issue comment ${{ github.event.issue.number }} \
+          gh issue comment "$SUBMISSION_ISSUE_NUMBER" \
             --repo "${{ github.repository }}" --body "$BODY"
