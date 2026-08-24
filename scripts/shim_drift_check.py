@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Detect drift between the canonical challenge statements
-(utkuokur/lean-challenges) and the signature-shim templates in
+(TenChallenges/ten-challenges) and the signature-shim templates in
 generate_check.py.
 
 The two repos hold the same theorem signatures in two places: the canonical
@@ -135,7 +135,7 @@ def run_one(project: pathlib.Path, problem_id: str) -> tuple[bool, str]:
 def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--project", required=True,
-                   help="path to a checkout of utkuokur/lean-challenges")
+                   help="path to a checkout of TenChallenges/ten-challenges")
     p.add_argument("--problems", nargs="*", default=sorted(CHECKS),
                    help="subset of problem ids (default: all)")
     args = p.parse_args()

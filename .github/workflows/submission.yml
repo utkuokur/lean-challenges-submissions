@@ -5,7 +5,7 @@ name: Evaluate submission
 # (a single .lean file at a public raw URL, or a — possibly PRIVATE —
 # GitHub repo cloned with the `lean-challenge-bot` App token), runs the
 # content checks + `lake build` signature shim against a fresh checkout
-# of utkuokur/lean-challenges, and — BEFORE building — encrypts the
+# of TenChallenges/ten-challenges, and — BEFORE building — encrypts the
 # fetched source for the audit archive.
 #
 # CONFIDENTIALITY MODEL (ported from leanprover/lean-eval-submissions).
@@ -68,7 +68,7 @@ jobs:
       - name: Checkout lean-challenges build environment
         uses: actions/checkout@v4
         with:
-          repository: utkuokur/lean-challenges
+          repository: TenChallenges/ten-challenges
           ref: main
           path: lean-challenge
           persist-credentials: false

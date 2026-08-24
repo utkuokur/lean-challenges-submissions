@@ -1,13 +1,13 @@
 name: Shim drift check
 
-# The canonical theorem statements (utkuokur/lean-challenges) and the CHECKS
+# The canonical theorem statements (TenChallenges/ten-challenges) and the CHECKS
 # templates in scripts/generate_check.py hold the same signatures in two
 # places, and they must move in lockstep. This workflow rebuilds every shim
 # against a mock submission that re-exports the canonical (sorry-backed)
 # theorem; a template that drifted fails with a type error, while an in-sync
 # one fails only at the sorryAx axiom gate. See scripts/shim_drift_check.py.
 #
-# The mirror-image workflow in utkuokur/lean-challenges runs the same script
+# The mirror-image workflow in TenChallenges/ten-challenges runs the same script
 # on every push that touches Challenges/** — that side catches canon edits,
 # this side catches template edits.
 
@@ -42,7 +42,7 @@ jobs:
 
       - uses: actions/checkout@v4
         with:
-          repository: utkuokur/lean-challenges
+          repository: TenChallenges/ten-challenges
           ref: main
           path: lean-challenge
           persist-credentials: false
