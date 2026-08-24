@@ -18,6 +18,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          gh issue reopen 9 --repo "${GITHUB_REPOSITORY}"
           ISSUE_BODY=$(gh api "repos/${GITHUB_REPOSITORY}/issues/9" --jq .body)
           jq -n --arg issue_body "$ISSUE_BODY" \
             '{event_type: "smoke-resubmit", client_payload: {issue_number: 9, issue_body: $issue_body}}' \
