@@ -157,7 +157,7 @@ example : ∀ r : ℕ, statement_05 r :=
 import Challenges.challenge_06_univ
 import Challenges.Submission
 
-example : ∀ r : Ordinal.{1}, statement_06 r :=
+example : ∀ r : Ordinal, statement_06 r :=
   Submission.challenge_6
 """,
     "challenge_7_univ": r"""
@@ -231,7 +231,7 @@ example : ¬ ∀ r : ℕ, statement_05 r :=
 import Challenges.challenge_06_disprove
 import Challenges.Submission
 
-example : ¬ ∀ r : Ordinal.{1}, statement_06 r :=
+example : ¬ ∀ r : Ordinal, statement_06 r :=
   Submission.challenge_6
 """,
     "challenge_7_disprove": r"""
