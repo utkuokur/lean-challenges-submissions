@@ -1,7 +1,7 @@
 # ten-challenges-submissions
 
 Submission queue and leaderboard for the
-[lean-challenges](https://github.com/utkuokur/lean-challenge) parametrized
+[ten-challenges](https://github.com/TenChallenges/ten-challenges) parametrized
 problem set.
 
 ## How to submit
@@ -19,7 +19,7 @@ you're settling:
 
 Either way, you submit a **GitHub repository URL** (a single field on
 the form). Your repo — public, or **private** with the
-`lean-challenge-bot` App installed (see "Keeping your proof private"
+`ten-challenges-bot` App installed (see "Keeping your proof private"
 below) — must contain:
 
 ```
@@ -50,11 +50,11 @@ You can keep your proof source hidden from other contestants while still
 appearing on the leaderboard:
 
 1. Host your proof in a **private** GitHub repo.
-2. Install the **`lean-challenge-bot`** GitHub App on that repo so the CI
-   can clone it: **<https://github.com/apps/lean-challenge-bot>**.
+2. Install the **`ten-challenges-bot`** GitHub App on that repo so the CI
+   can clone it: **<https://github.com/apps/ten-challenges-bot>**.
 3. **Verify the install** After
    installing, go to your repo's **Settings → GitHub Apps** (or
-   <https://github.com/settings/installations>). `lean-challenge-bot` should
+   <https://github.com/settings/installations>). `ten-challenges-bot` should
    be listed, and if you chose **"Only select repositories"** during install,
    your submission repo must be ticked under its *Repository access*. The app
    needs only **Contents: Read** — nothing else.
@@ -151,10 +151,10 @@ Private submissions + the encrypted audit archive need one-time setup
 beyond the default `GITHUB_TOKEN`. The full checklist is in
 [`docs/ci-secrets.md`](docs/ci-secrets.md); in brief:
 
-- **`lean-challenge-bot`** GitHub App (Contents: Read, installable on any
+- **`ten-challenges-bot`** GitHub App (Contents: Read, installable on any
   account) — lets CI clone private submission repos. Secrets:
   `LEAN_CHALLENGE_BOT_APP_ID`, `LEAN_CHALLENGE_BOT_PRIVATE_KEY`.
-- **`lean-challenge-archiver`** GitHub App (Contents: R/W, on this
+- **`ten-challenges-archiver`** GitHub App (Contents: R/W, on this
   account only) — pushes the encrypted archive. Secrets:
   `LEAN_CHALLENGE_ARCHIVER_APP_ID`, `LEAN_CHALLENGE_ARCHIVER_PRIVATE_KEY`.
 - a **private `utkuokur/ten-challenges-audit`** repo, and at least one

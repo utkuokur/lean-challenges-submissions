@@ -53,7 +53,7 @@ Two pieces inside `submission.yml`:
 
 2. **Archive job**, runs after `evaluate` on a fresh runner (the
    write-capable archiver token must never be co-resident with untrusted
-   Lean). It mints an installation token for the `lean-challenge-archiver`
+   Lean). It mints an installation token for the `ten-challenges-archiver`
    App (scoped only to `ten-challenges-audit`), merges in the build
    verdict (`pass`/`fail`), and uploads both objects via the GitHub
    Contents API. **`record` (the leaderboard updater) is gated on this
@@ -77,8 +77,8 @@ submission leaking out of the maintainer set.**
 - **Runners that elaborate untrusted Lean can be compromised.** The
   archiver App's write token is minted only in the `archive` job, on a
   separate runner that never touched the submitted source.
-- **App permission scoping.** `lean-challenge-archiver` has Contents:
-  write only on `ten-challenges-audit`. `lean-challenge-bot` (which
+- **App permission scoping.** `ten-challenges-archiver` has Contents:
+  write only on `ten-challenges-audit`. `ten-challenges-bot` (which
   reads contributor repos) stays Contents: Read only.
 
 ### Not in the threat model

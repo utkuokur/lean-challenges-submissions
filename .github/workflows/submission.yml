@@ -3,7 +3,7 @@ name: Evaluate submission
 # Triggered when a submission issue is opened/labeled/reopened. The
 # `evaluate` job parses the issue body, fetches the user's submission
 # (a single .lean file at a public raw URL, or a — possibly PRIVATE —
-# GitHub repo cloned with the `lean-challenge-bot` App token), runs the
+# GitHub repo cloned with the `ten-challenges-bot` App token), runs the
 # content checks + `lake build` signature shim against a fresh checkout
 # of TenChallenges/ten-challenges, and — BEFORE building — encrypts the
 # fetched source for the audit archive.
@@ -17,7 +17,7 @@ name: Evaluate submission
 #     runner boundary as a downloadable artifact (public-repo artifacts
 #     are downloadable by anyone authenticated). Do NOT upload the
 #     plaintext source as an artifact, and do NOT split fetch from build.
-#   * the `lean-challenge-bot` installation token is scoped to the single
+#   * the `ten-challenges-bot` installation token is scoped to the single
 #     `Fetch submission` step's env — never a job-level env/secret.
 #   * `persist-credentials: false` on both checkouts + `.git` stripped
 #     from both checkouts AND the user clone before `lake build` runs,
@@ -102,7 +102,7 @@ jobs:
           if not repo_url:
               sys.exit("Fill in `Repository URL` — the HTTPS URL of your "
                        "GitHub repo (public, or private with the "
-                       "`lean-challenge-bot` App installed).")
+                       "`ten-challenges-bot` App installed).")
           mode = "repo"
           repo_ref = "main"
 
@@ -163,7 +163,7 @@ jobs:
             echo "owner_repo=${OWNER_REPO}"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Mint lean-challenge-bot installation token
+      - name: Mint ten-challenges-bot installation token
         id: app_token
         if: steps.parse.outputs.mode == 'repo'
         uses: actions/create-github-app-token@v1
@@ -252,7 +252,7 @@ jobs:
           fi
           if ! git clone --depth 1 --branch "$REPO_REF" "$CLONE_URL" /tmp/user-repo 2>/dev/null; then
             if [ "$SUBMISSION_PUBLIC" != "true" ]; then
-              echo "FETCH_ERROR=Could not clone the (private) repo \`$REPO_URL\`. Install the \`lean-challenge-bot\` GitHub App on it (link in the README) so CI can read it, then re-open this issue." >> "$GITHUB_ENV"
+              echo "FETCH_ERROR=Could not clone the (private) repo \`$REPO_URL\`. Install the \`ten-challenges-bot\` GitHub App on it (link in the README) so CI can read it, then re-open this issue." >> "$GITHUB_ENV"
             else
               echo "FETCH_ERROR=Could not clone \`$REPO_URL\`. Check the URL and that it has a \`main\` branch." >> "$GITHUB_ENV"
             fi
@@ -507,7 +507,7 @@ jobs:
 
   # ─────────────────────────────────────────────────────────────────────
   # archive: push the age-encrypted source + sidecar to the PRIVATE audit
-  # repo via the lean-challenge-archiver App. Fresh runner — the
+  # repo via the ten-challenges-archiver App. Fresh runner — the
   # write-capable token must never be co-resident with untrusted Lean.
   # Runs whenever the source was fetched, within cap, and encrypted —
   # even if the build later failed (we still archive what we evaluated).
@@ -533,7 +533,7 @@ jobs:
           name: submission-audit-ciphertext
           path: /tmp/audit-in
 
-      - name: Mint lean-challenge-archiver installation token
+      - name: Mint ten-challenges-archiver installation token
         id: archiver_token
         uses: actions/create-github-app-token@v1
         with:

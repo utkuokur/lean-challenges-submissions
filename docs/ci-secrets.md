@@ -12,8 +12,8 @@ and the frontend fetches `site-data/leaderboard.json` directly).
 
 | Item | Type | Stored as | Used by |
 | --- | --- | --- | --- |
-| `lean-challenge-bot` | GitHub App | `LEAN_CHALLENGE_BOT_APP_ID`, `LEAN_CHALLENGE_BOT_PRIVATE_KEY` | `submission.yml` (fetch / clone private repos) |
-| `lean-challenge-archiver` | GitHub App | `LEAN_CHALLENGE_ARCHIVER_APP_ID`, `LEAN_CHALLENGE_ARCHIVER_PRIVATE_KEY` | `submission.yml` (archive) |
+| `ten-challenges-bot` | GitHub App | `LEAN_CHALLENGE_BOT_APP_ID`, `LEAN_CHALLENGE_BOT_PRIVATE_KEY` | `submission.yml` (fetch / clone private repos) |
+| `ten-challenges-archiver` | GitHub App | `LEAN_CHALLENGE_ARCHIVER_APP_ID`, `LEAN_CHALLENGE_ARCHIVER_PRIVATE_KEY` | `submission.yml` (archive) |
 | `ten-challenges-audit` | private repo | — | holds the age-encrypted source archive |
 | an `age` recipient | public key | `.audit/recipients.txt` (committed) | `submission.yml` (encrypt) |
 
@@ -37,10 +37,10 @@ encrypted archive.
    keep the private key safe and backed up — losing every recipient
    private key makes the archive permanently undecryptable.
 
-3. **Create the `lean-challenge-bot` App** (clones submission repos,
+3. **Create the `ten-challenges-bot` App** (clones submission repos,
    including private ones):
    - <https://github.com/settings/apps/new>
-   - Name: `lean-challenge-bot`; Webhook → Active: **unchecked**
+   - Name: `ten-challenges-bot`; Webhook → Active: **unchecked**
    - Repository permissions → **Contents: Read** (nothing else)
    - Where can this GitHub App be installed: **Any account** (submitters
      install it on their own repos)
@@ -51,14 +51,14 @@ encrypted archive.
      gh secret set LEAN_CHALLENGE_BOT_APP_ID -R utkuokur/ten-challenges-submissions --body <APP_ID>
      gh secret set LEAN_CHALLENGE_BOT_PRIVATE_KEY -R utkuokur/ten-challenges-submissions < path/to/bot-key.pem
      ```
-   - Put the **public install URL** (`https://github.com/apps/lean-challenge-bot`)
+   - Put the **public install URL** (`https://github.com/apps/ten-challenges-bot`)
      in the README so submitters can install it.
 
-4. **Create the `lean-challenge-archiver` App** (writes the private audit
+4. **Create the `ten-challenges-archiver` App** (writes the private audit
    repo). This MUST be a separate App from the bot — the bot is
    installed on arbitrary third-party repos and must stay read-only; a
    write-capable App must never be installable on third-party repos:
-   - Name: `lean-challenge-archiver`; Webhook: unchecked
+   - Name: `ten-challenges-archiver`; Webhook: unchecked
    - Repository permissions → **Contents: Read and write**
    - Where can this GitHub App be installed: **Only on this account**
    - Save → note the App ID; generate a private key.

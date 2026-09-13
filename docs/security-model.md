@@ -22,7 +22,7 @@ on, and — importantly — where they are **weaker** than the upstream
 
 ## 2. How confidentiality is achieved
 
-1. **Private source via the `lean-challenge-bot` App.** Submissions are
+1. **Private source via the `ten-challenges-bot` App.** Submissions are
    always a GitHub repo, cloned with a step-scoped installation token; a
    private repo with the App installed clones, a private repo without it
    is rejected with instructions.
