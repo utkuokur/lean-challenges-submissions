@@ -48,7 +48,7 @@ import urllib.request
 
 SIZE_CAP_BYTES = 10 * 1024 * 1024  # 10 MiB. Matches the workflow.
 SIDECAR_SCHEMA_VERSION = 1
-DEFAULT_AUDIT_REPO = "utkuokur/lean-challenges-audit"
+DEFAULT_AUDIT_REPO = "utkuokur/ten-challenges-audit"
 PUSH_RETRY_ATTEMPTS = 5
 
 # `submission_ref` is a full 40-char lowercase hex SHA resolved from the

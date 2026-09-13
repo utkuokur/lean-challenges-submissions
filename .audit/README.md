@@ -1,7 +1,7 @@
 # Audit archive recipient list
 
 This directory holds the recipient list for the long-term audit archive
-maintained in the **private** `lean-challenges-audit` repository.
+maintained in the **private** `ten-challenges-audit` repository.
 
 [`recipients.txt`](recipients.txt) is read by `age` in the submission
 workflow to encrypt every submission's source tarball before it is

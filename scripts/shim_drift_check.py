@@ -35,7 +35,7 @@ For every problem id in CHECKS, the script
    from the canon. A successful build is impossible and reported as a
    failure of the axiom gate itself.
 
-Usage (from a checkout of lean-challenges-submissions, with the canonical
+Usage (from a checkout of ten-challenges-submissions, with the canonical
 repo checked out next to it)::
 
     python3 scripts/shim_drift_check.py --project ../lean-challenges \

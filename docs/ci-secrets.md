@@ -14,7 +14,7 @@ and the frontend fetches `site-data/leaderboard.json` directly).
 | --- | --- | --- | --- |
 | `lean-challenge-bot` | GitHub App | `LEAN_CHALLENGE_BOT_APP_ID`, `LEAN_CHALLENGE_BOT_PRIVATE_KEY` | `submission.yml` (fetch / clone private repos) |
 | `lean-challenge-archiver` | GitHub App | `LEAN_CHALLENGE_ARCHIVER_APP_ID`, `LEAN_CHALLENGE_ARCHIVER_PRIVATE_KEY` | `submission.yml` (archive) |
-| `lean-challenges-audit` | private repo | — | holds the age-encrypted source archive |
+| `ten-challenges-audit` | private repo | — | holds the age-encrypted source archive |
 | an `age` recipient | public key | `.audit/recipients.txt` (committed) | `submission.yml` (encrypt) |
 
 Until **all** of these exist, the pipeline is down: the `encrypt` step
@@ -25,7 +25,7 @@ encrypted archive.
 ## Setup checklist (one-time)
 
 1. **Create the private audit repo.** A new **private** repo
-   `utkuokur/lean-challenges-audit` (empty is fine; the archiver creates
+   `utkuokur/ten-challenges-audit` (empty is fine; the archiver creates
    files via the Contents API). If you pick a different name, update
    `DEFAULT_AUDIT_REPO` in `scripts/archive_submission.py` and the
    `repositories:` input of the `archive` job in `submission.yml`.
@@ -46,10 +46,10 @@ encrypted archive.
      install it on their own repos)
    - Save → note the **App ID**; generate a **private key** (`.pem`).
    - Install it on this repo too (so the workflow has an installation).
-   - Set secrets on `utkuokur/lean-challenges-submissions`:
+   - Set secrets on `utkuokur/ten-challenges-submissions`:
      ```bash
-     gh secret set LEAN_CHALLENGE_BOT_APP_ID -R utkuokur/lean-challenges-submissions --body <APP_ID>
-     gh secret set LEAN_CHALLENGE_BOT_PRIVATE_KEY -R utkuokur/lean-challenges-submissions < path/to/bot-key.pem
+     gh secret set LEAN_CHALLENGE_BOT_APP_ID -R utkuokur/ten-challenges-submissions --body <APP_ID>
+     gh secret set LEAN_CHALLENGE_BOT_PRIVATE_KEY -R utkuokur/ten-challenges-submissions < path/to/bot-key.pem
      ```
    - Put the **public install URL** (`https://github.com/apps/lean-challenge-bot`)
      in the README so submitters can install it.
@@ -62,11 +62,11 @@ encrypted archive.
    - Repository permissions → **Contents: Read and write**
    - Where can this GitHub App be installed: **Only on this account**
    - Save → note the App ID; generate a private key.
-   - Install it **only** on `utkuokur/lean-challenges-audit`.
+   - Install it **only** on `utkuokur/ten-challenges-audit`.
    - Set secrets:
      ```bash
-     gh secret set LEAN_CHALLENGE_ARCHIVER_APP_ID -R utkuokur/lean-challenges-submissions --body <APP_ID>
-     gh secret set LEAN_CHALLENGE_ARCHIVER_PRIVATE_KEY -R utkuokur/lean-challenges-submissions < path/to/archiver-key.pem
+     gh secret set LEAN_CHALLENGE_ARCHIVER_APP_ID -R utkuokur/ten-challenges-submissions --body <APP_ID>
+     gh secret set LEAN_CHALLENGE_ARCHIVER_PRIVATE_KEY -R utkuokur/ten-challenges-submissions < path/to/archiver-key.pem
      ```
 
 5. **(Recommended) Decide on repo visibility.** See `security-model.md` §
@@ -80,7 +80,7 @@ encrypted archive.
 
 6. **Smoke-test.** File a submission against a small **private** test
    repo with the bot App installed, confirm: the issue is accepted, an
-   object appears under `audit/YYYY/MM/...` in `lean-challenges-audit`,
+   object appears under `audit/YYYY/MM/...` in `ten-challenges-audit`,
    the leaderboard row has `submission_public: false` and an empty
    `source_url`, and you can decrypt the archived tarball
    (`docs/audit-archive.md` > "Decryption procedure").

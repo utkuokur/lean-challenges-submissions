@@ -540,9 +540,9 @@ jobs:
           app-id: ${{ secrets.LEAN_CHALLENGE_ARCHIVER_APP_ID }}
           private-key: ${{ secrets.LEAN_CHALLENGE_ARCHIVER_PRIVATE_KEY }}
           owner: utkuokur
-          repositories: lean-challenges-audit
+          repositories: ten-challenges-audit
 
-      - name: Push to lean-challenges-audit
+      - name: Push to ten-challenges-audit
         env:
           # Step-scoped, mirroring the bot-token pattern in `evaluate`.
           ARCHIVER_TOKEN: ${{ steps.archiver_token.outputs.token }}

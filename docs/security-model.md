@@ -44,7 +44,7 @@ on, and — importantly — where they are **weaker** than the upstream
    separate `archive` job.
 5. **Encrypted audit retention.** Every fetched submission's source tar
    is age-encrypted to `.audit/recipients.txt` and pushed to the private
-   `lean-challenges-audit` repo. `record` is gated on `archive`, so a
+   `ten-challenges-audit` repo. `record` is gated on `archive`, so a
    leaderboard entry always implies a durable encrypted copy. See
    `docs/audit-archive.md`.
 6. **Network-isolated build.** The untrusted submission is compiled under

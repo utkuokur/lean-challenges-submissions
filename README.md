@@ -1,4 +1,4 @@
-# lean-challenges-submissions
+# ten-challenges-submissions
 
 Submission queue and leaderboard for the
 [lean-challenges](https://github.com/utkuokur/lean-challenge) parametrized
@@ -113,7 +113,7 @@ site-data/
 
 Accepted proofs are **no longer** committed in plaintext here. Instead an
 age-encrypted copy of every evaluated submission is pushed to the private
-`utkuokur/lean-challenges-audit` repo (see `docs/audit-archive.md`).
+`utkuokur/ten-challenges-audit` repo (see `docs/audit-archive.md`).
 
 ## Schema of `site-data/leaderboard.json`
 
@@ -157,7 +157,7 @@ beyond the default `GITHUB_TOKEN`. The full checklist is in
 - **`lean-challenge-archiver`** GitHub App (Contents: R/W, on this
   account only) — pushes the encrypted archive. Secrets:
   `LEAN_CHALLENGE_ARCHIVER_APP_ID`, `LEAN_CHALLENGE_ARCHIVER_PRIVATE_KEY`.
-- a **private `utkuokur/lean-challenges-audit`** repo, and at least one
+- a **private `utkuokur/ten-challenges-audit`** repo, and at least one
   age recipient public key in `.audit/recipients.txt`.
 
 The default `GITHUB_TOKEN` still covers the leaderboard commit

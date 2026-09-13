@@ -17,7 +17,7 @@ submission's source while *other contestants* cannot.
 ## Design
 
 One encrypted tarball plus one unencrypted JSON sidecar are pushed to the
-**private** `utkuokur/lean-challenges-audit` repository per submission,
+**private** `utkuokur/ten-challenges-audit` repository per submission,
 immediately after evaluation.
 
 ```
@@ -54,7 +54,7 @@ Two pieces inside `submission.yml`:
 2. **Archive job**, runs after `evaluate` on a fresh runner (the
    write-capable archiver token must never be co-resident with untrusted
    Lean). It mints an installation token for the `lean-challenge-archiver`
-   App (scoped only to `lean-challenges-audit`), merges in the build
+   App (scoped only to `ten-challenges-audit`), merges in the build
    verdict (`pass`/`fail`), and uploads both objects via the GitHub
    Contents API. **`record` (the leaderboard updater) is gated on this
    job succeeding**, so a leaderboard entry always implies a durable
@@ -78,7 +78,7 @@ submission leaking out of the maintainer set.**
   archiver App's write token is minted only in the `archive` job, on a
   separate runner that never touched the submitted source.
 - **App permission scoping.** `lean-challenge-archiver` has Contents:
-  write only on `lean-challenges-audit`. `lean-challenge-bot` (which
+  write only on `ten-challenges-audit`. `lean-challenge-bot` (which
   reads contributor repos) stays Contents: Read only.
 
 ### Not in the threat model
